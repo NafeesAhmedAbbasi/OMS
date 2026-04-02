@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Database (contains real order data — keep local only)
+server/db.sqlite
+
+# Uploaded images
+server/uploads/*
+!server/uploads/.gitkeep
+
+# React build output
+client/dist/
+
+# Environment variables
+.env
+.env.local
+.env.production
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*

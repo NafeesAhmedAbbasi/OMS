@@ -1,0 +1,11 @@
+{
+  "name": "oms",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "server": "cd server && node index.js",
+    "client": "cd client && npm run dev",
+    "seed": "cd server && node seed.js",
+    "install:all": "cd server && npm install && cd ../client && npm install"
+  }
+}
