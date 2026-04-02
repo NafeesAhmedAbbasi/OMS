@@ -1,17 +1,21 @@
 const express = require('express');
 const multer = require('multer');
-const path = require('path');
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const db = require('../db');
 const { authMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
 
-const storage = multer.diskStorage({
-  destination: path.join(__dirname, '../uploads'),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, `order-${Date.now()}${ext}`);
-  }
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: { folder: 'oms-orders', allowed_formats: ['jpg', 'jpeg', 'png', 'webp'] },
 });
 const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } });
 
@@ -42,7 +46,7 @@ router.post('/', upload.single('image'), (req, res) => {
 
   const row = db.prepare('SELECT MAX(order_number) as max FROM orders').get();
   const order_number = row.max ? row.max + 1 : 4001;
-  const image_path = req.file ? `/uploads/${req.file.filename}` : null;
+  const image_path = req.file ? req.file.path : null;
 
   const result = db.prepare(`
     INSERT INTO orders (order_number, date, customer, store_ref, mc_pkr, sc_pkr,
@@ -79,7 +83,7 @@ router.put('/:id', upload.single('image'), (req, res) => {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
-  const image_path = req.file ? `/uploads/${req.file.filename}` : existing.image_path;
+  const image_path = req.file ? req.file.path : existing.image_path;
 
   db.prepare(`
     UPDATE orders SET
