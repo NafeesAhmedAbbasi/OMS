@@ -44,4 +44,15 @@ for (const sql of migrations) {
   try { db.exec(sql); } catch { /* already exists */ }
 }
 
+// Seed default users if they don't exist
+const bcrypt = require('bcryptjs');
+const seedUsers = [
+  { username: 'admin', password: 'admin123', role: 'admin' },
+  { username: 'deo', password: 'deo123', role: 'deo' },
+];
+const insertUser = db.prepare('INSERT OR IGNORE INTO users (username, password_hash, role) VALUES (?, ?, ?)');
+for (const u of seedUsers) {
+  insertUser.run(u.username, bcrypt.hashSync(u.password, 10), u.role);
+}
+
 module.exports = db;
