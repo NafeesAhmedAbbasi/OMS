@@ -11,10 +11,15 @@ router.get('/', (req, res) => {
   const handlers = db.prepare(
     `SELECT id, username, is_active FROM users WHERE role = 'handler' ORDER BY username ASC`
   ).all();
-  const commissions = db.prepare(
-    `SELECT hc.handler_user_id, hc.item_type_id, hc.amount_pkr, it.name as item_type_name
-     FROM handler_commissions hc JOIN item_types it ON hc.item_type_id = it.id`
-  ).all();
+
+  let commissions = [];
+  try {
+    commissions = db.prepare(
+      `SELECT hc.handler_user_id, hc.item_type_id, hc.amount_pkr, it.name as item_type_name
+       FROM handler_commissions hc JOIN item_types it ON hc.item_type_id = it.id`
+    ).all();
+  } catch { /* table may not exist yet on older deployments */ }
+
   res.json(handlers.map(h => ({
     ...h,
     commissions: commissions.filter(c => c.handler_user_id === h.id),
@@ -47,12 +52,9 @@ router.get('/:id/balance', (req, res) => {
   const handler = db.prepare(`SELECT id, username FROM users WHERE id = ? AND role = 'handler'`).get(id);
   if (!handler) return res.status(404).json({ error: 'Handler not found' });
 
-  const bills = db.prepare(
-    `SELECT * FROM handler_bills WHERE handler_user_id = ? ORDER BY date DESC`
-  ).all(id);
-  const payments = db.prepare(
-    `SELECT * FROM handler_payments WHERE handler_user_id = ? ORDER BY date DESC`
-  ).all(id);
+  let bills = [], payments = [];
+  try { bills = db.prepare(`SELECT * FROM handler_bills WHERE handler_user_id = ? ORDER BY date DESC`).all(id); } catch {}
+  try { payments = db.prepare(`SELECT * FROM handler_payments WHERE handler_user_id = ? ORDER BY date DESC`).all(id); } catch {}
 
   const totalBilled = bills.reduce((s, b) => s + (b.total_pkr || 0), 0);
   const totalPaid   = payments.reduce((s, p) => s + (p.amount_pkr || 0), 0);

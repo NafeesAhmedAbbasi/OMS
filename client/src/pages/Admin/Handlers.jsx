@@ -7,7 +7,7 @@ const today = new Date().toISOString().slice(0, 10);
 function fmt(n) { return Number(n || 0).toLocaleString('en-PK'); }
 
 export default function Handlers() {
-  const [handlers, setHandlers]   = useState([]);
+  const [handlers, setHandlers]   = useState(null); // null = not loaded yet
   const [itemTypes, setItemTypes] = useState([]);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState('');
@@ -35,7 +35,7 @@ export default function Handlers() {
 
   useEffect(() => {
     Promise.all([api.get('/handlers'), api.get('/item-types')])
-      .then(([hRes, iRes]) => { setHandlers(hRes.data); setItemTypes(iRes.data); })
+      .then(([hRes, iRes]) => { setHandlers(hRes.data); setItemTypes(iRes.data); setError(''); })
       .catch(() => setError('Failed to load handlers. The server may still be deploying — please refresh in a moment.'))
       .finally(() => setLoading(false));
   }, []);
@@ -151,7 +151,7 @@ export default function Handlers() {
         {error   && <p className="error-msg">{error}</p>}
         {success && <p className="success-msg">{success}</p>}
 
-        {loading ? <div className="loading-state">Loading…</div> : handlers.length === 0 ? (
+        {loading ? <div className="loading-state">Loading…</div> : !handlers ? null : handlers.length === 0 ? (
           <div className="table-card"><div className="no-data" style={{ padding: 32 }}>
             No handlers yet. <a href="/admin/users" style={{ color: 'var(--primary)' }}>Create a user with role "handler"</a> first.
           </div></div>
