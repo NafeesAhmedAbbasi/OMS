@@ -74,6 +74,9 @@ const migrations = [
   `ALTER TABLE users_final RENAME TO users`,
   `DROP TABLE IF EXISTS users_old_final`,
   `CREATE TABLE IF NOT EXISTS item_types (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+  `CREATE TABLE IF NOT EXISTS handler_commissions (id INTEGER PRIMARY KEY AUTOINCREMENT, handler_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, item_type_id INTEGER NOT NULL REFERENCES item_types(id) ON DELETE CASCADE, amount_pkr REAL NOT NULL DEFAULT 0, UNIQUE(handler_user_id, item_type_id))`,
+  `CREATE TABLE IF NOT EXISTS handler_bills (id INTEGER PRIMARY KEY AUTOINCREMENT, handler_user_id INTEGER NOT NULL REFERENCES users(id), order_id INTEGER REFERENCES orders(id), order_number INTEGER, item_type TEXT, shipping_cost_pkr REAL NOT NULL DEFAULT 0, manufacturing_cost_pkr REAL NOT NULL DEFAULT 0, commission_pkr REAL NOT NULL DEFAULT 0, total_pkr REAL NOT NULL DEFAULT 0, note TEXT, date TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+  `CREATE TABLE IF NOT EXISTS handler_payments (id INTEGER PRIMARY KEY AUTOINCREMENT, handler_user_id INTEGER NOT NULL REFERENCES users(id), amount_pkr REAL NOT NULL, date TEXT NOT NULL, note TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
 ];
 for (const sql of migrations) {
   try { db.exec(sql); } catch { /* already exists */ }

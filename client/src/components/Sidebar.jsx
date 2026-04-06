@@ -37,6 +37,17 @@ const ADMIN_NAV = [
     ),
   },
   {
+    to: '/admin/handlers',
+    label: 'Handlers',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+        <circle cx="12" cy="7" r="4"/>
+        <path d="M16 11l2 2 4-4"/>
+      </svg>
+    ),
+  },
+  {
     to: '/admin/item-types',
     label: 'Item Types',
     icon: (

@@ -8,6 +8,7 @@ import AdminTransfers from './pages/Admin/Transfers';
 import AdminOrders from './pages/Admin/Orders';
 import AdminOrderList from './pages/Admin/OrderList';
 import AdminItemTypes from './pages/Admin/ItemTypes';
+import AdminHandlers from './pages/Admin/Handlers';
 import EditorDashboard from './pages/Editor/Dashboard';
 import EditorOrders from './pages/Editor/Orders';
 import EditorBilling from './pages/Editor/BillingAccounts';
@@ -44,6 +45,9 @@ export default function App() {
         } />
         <Route path="/admin/item-types" element={
           <PrivateRoute role="admin"><AdminItemTypes /></PrivateRoute>
+        } />
+        <Route path="/admin/handlers" element={
+          <PrivateRoute role="admin"><AdminHandlers /></PrivateRoute>
         } />
 
         <Route path="/editor/dashboard" element={
