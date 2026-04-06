@@ -1,4 +1,5 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
+import html2canvas from 'html2canvas';
 
 function formatCardDate(dateStr) {
   if (!dateStr) return '';
@@ -14,11 +15,48 @@ function paymentAbbr(method) {
 
 export default function OrderCard({ order, onClose }) {
   const cardRef = useRef(null);
+  const [sharing, setSharing] = useState(false);
 
   if (!order) return null;
 
   function handlePrint() {
     window.print();
+  }
+
+  async function handleWhatsApp() {
+    setSharing(true);
+    try {
+      const canvas = await html2canvas(cardRef.current, { useCORS: true, scale: 2 });
+
+      // Try Web Share API (works on mobile / supported browsers)
+      if (navigator.canShare) {
+        const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+        const file = new File([blob], `order-${order.order_number}.png`, { type: 'image/png' });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: `Order #${order.order_number}`,
+            text: `Order #${order.order_number} — ${order.customer}`,
+          });
+          return;
+        }
+      }
+
+      // Fallback: download image + open WhatsApp with text
+      const link = document.createElement('a');
+      link.download = `order-${order.order_number}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+
+      const text = encodeURIComponent(
+        `Order #${order.order_number}\nCustomer: ${order.customer}\nSize: ${order.size}\nSource: ${order.source}\nDate: ${formatCardDate(order.date)}`
+      );
+      window.open(`https://wa.me/?text=${text}`, '_blank');
+    } catch (err) {
+      if (err.name !== 'AbortError') alert('Could not share: ' + err.message);
+    } finally {
+      setSharing(false);
+    }
   }
 
   return (
@@ -30,11 +68,19 @@ export default function OrderCard({ order, onClose }) {
           <span className="order-card-hint">Take a screenshot or use Print to save</span>
           <div style={{ display: 'flex', gap: 10 }}>
             <button className="btn-ghost" onClick={onClose}>Close</button>
+            <button
+              className="btn-ghost"
+              onClick={handleWhatsApp}
+              disabled={sharing}
+              style={{ background: '#25D366', color: '#fff', border: 'none' }}
+            >
+              {sharing ? 'Preparing…' : 'Share via WhatsApp'}
+            </button>
             <button className="btn-primary" onClick={handlePrint}>Print / Save</button>
           </div>
         </div>
 
-        {/* THE CARD — this is what gets printed */}
+        {/* THE CARD — this is what gets printed/captured */}
         <div className="order-card print-target" ref={cardRef}>
 
           {/* Top row: Order # | Payment | Date */}
@@ -57,6 +103,7 @@ export default function OrderCard({ order, onClose }) {
                 src={order.image_path}
                 alt="Product"
                 className="oc-image"
+                crossOrigin="anonymous"
               />
             ) : (
               <div className="oc-image-placeholder">
@@ -87,3 +134,4 @@ export default function OrderCard({ order, onClose }) {
     </div>
   );
 }
+
