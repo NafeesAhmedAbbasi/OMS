@@ -66,13 +66,6 @@ const migrations = [
   `ALTER TABLE orders ADD COLUMN net_amount REAL`,
   `ALTER TABLE orders ADD COLUMN confirmed_billing_account_id INTEGER REFERENCES billing_accounts(id)`,
   `ALTER TABLE transfers ADD COLUMN amount_pkr REAL`,
-  // Rebuild users table with full role set + is_active
-  `CREATE TABLE IF NOT EXISTS users_final (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin','deo','editor','handler')), is_active INTEGER NOT NULL DEFAULT 1)`,
-  `INSERT OR IGNORE INTO users_final (id, username, password_hash, role, is_active) SELECT id, username, password_hash, role, COALESCE(is_active, 1) FROM users`,
-  `DROP TABLE IF EXISTS users_old_final`,
-  `ALTER TABLE users RENAME TO users_old_final`,
-  `ALTER TABLE users_final RENAME TO users`,
-  `DROP TABLE IF EXISTS users_old_final`,
   `CREATE TABLE IF NOT EXISTS item_types (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
   `CREATE TABLE IF NOT EXISTS handler_commissions (id INTEGER PRIMARY KEY AUTOINCREMENT, handler_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, item_type_id INTEGER NOT NULL REFERENCES item_types(id) ON DELETE CASCADE, amount_pkr REAL NOT NULL DEFAULT 0, UNIQUE(handler_user_id, item_type_id))`,
   `CREATE TABLE IF NOT EXISTS handler_bills (id INTEGER PRIMARY KEY AUTOINCREMENT, handler_user_id INTEGER NOT NULL REFERENCES users(id), order_id INTEGER REFERENCES orders(id), order_number INTEGER, item_type TEXT, shipping_cost_pkr REAL NOT NULL DEFAULT 0, manufacturing_cost_pkr REAL NOT NULL DEFAULT 0, commission_pkr REAL NOT NULL DEFAULT 0, total_pkr REAL NOT NULL DEFAULT 0, note TEXT, date TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
@@ -81,6 +74,29 @@ const migrations = [
 for (const sql of migrations) {
   try { db.exec(sql); } catch { /* already exists */ }
 }
+
+// Safely migrate users table to support all roles + is_active
+// Only runs if the current users table is missing the handler role or is_active column
+try {
+  const cols = db.prepare('PRAGMA table_info(users)').all().map(c => c.name);
+  const needsMigration = !cols.includes('is_active');
+  if (needsMigration) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS users_v2 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL CHECK(role IN ('admin','deo','editor','handler')),
+        is_active INTEGER NOT NULL DEFAULT 1
+      );
+      INSERT OR IGNORE INTO users_v2 (id, username, password_hash, role, is_active)
+        SELECT id, username, password_hash, role, 1 FROM users;
+      DROP TABLE IF EXISTS users;
+      ALTER TABLE users_v2 RENAME TO users;
+    `);
+    console.log('Users table migrated to v2');
+  }
+} catch (e) { console.error('Users migration error:', e.message); }
 
 // Seed default users if they don't exist
 const bcrypt = require('bcryptjs');
