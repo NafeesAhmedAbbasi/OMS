@@ -34,15 +34,48 @@ router.get('/storenvy-accounts/:id/orders', (req, res) => {
   https.get(url, (apiRes) => {
     let data = '';
     apiRes.on('data', chunk => data += chunk);
-    apiRes.on('end', () => {
+    apiRes.on('end', async () => {
       try {
         const parsed = JSON.parse(data);
         if (apiRes.statusCode !== 200) {
           return res.status(apiRes.statusCode).json({ error: parsed.message || 'Store Envy API error' });
         }
-        // Store Envy wraps response: { data: { orders: [...] } } or { orders: [...] } or [...]
         const ordersArray = parsed?.data?.orders || parsed?.orders || (Array.isArray(parsed) ? parsed : []);
-        res.json({ account: { id: account.id, name: account.name }, orders: ordersArray });
+
+        // Fetch product image for each unique product_id
+        const productIds = [...new Set(
+          ordersArray.flatMap(o => (o.items || []).map(i => (i.item || i).product_id).filter(Boolean))
+        )];
+
+        const imageMap = {};
+        await Promise.all(productIds.map(pid => new Promise(resolve => {
+          const purl = `https://api.storenvy.com/v1/products/${pid}.json?api_key=${encodeURIComponent(account.api_key)}`;
+          https.get(purl, pres => {
+            let pdata = '';
+            pres.on('data', c => pdata += c);
+            pres.on('end', () => {
+              try {
+                const pp = JSON.parse(pdata);
+                const photo = pp?.data?.photos?.[0]?.photo?.large || pp?.data?.photos?.[0]?.photo?.medium;
+                if (photo) imageMap[pid] = photo.startsWith('//') ? 'https:' + photo : photo;
+              } catch {}
+              resolve();
+            });
+          }).on('error', resolve);
+        })));
+
+        // Embed image_url onto each order's first item
+        const enriched = ordersArray.map(o => ({
+          ...o,
+          items: (o.items || []).map((entry, idx) => {
+            const item = entry.item || entry;
+            return idx === 0 && imageMap[item.product_id]
+              ? { ...entry, item: { ...item, image_url: imageMap[item.product_id] } }
+              : entry;
+          }),
+        }));
+
+        res.json({ account: { id: account.id, name: account.name }, orders: enriched });
       } catch {
         res.status(500).json({ error: 'Invalid response from Store Envy' });
       }
