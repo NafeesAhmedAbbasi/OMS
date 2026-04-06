@@ -29,9 +29,11 @@ router.get('/next-number', (req, res) => {
 
 router.get('/', (req, res) => {
   const orders = db.prepare(`
-    SELECT orders.*, billing_accounts.name as billing_account_name
+    SELECT orders.*, billing_accounts.name as billing_account_name,
+           u.username as handler_username
     FROM orders
     LEFT JOIN billing_accounts ON orders.confirmed_billing_account_id = billing_accounts.id
+    LEFT JOIN users u ON orders.handler_id = u.id
     ORDER BY orders.order_number DESC
   `).all();
   res.json(orders);
@@ -126,8 +128,8 @@ router.put('/:id/confirm', requireRole('editor'), (req, res) => {
   const { id } = req.params;
   const existing = db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
   if (!existing) return res.status(404).json({ error: 'Order not found' });
-  if (existing.status !== 'open') {
-    return res.status(400).json({ error: 'Only open orders can be confirmed' });
+  if (!['open', 'processing'].includes(existing.status)) {
+    return res.status(400).json({ error: 'Only open or processing orders can be confirmed' });
   }
   const { cad_amount, commission, confirmed_billing_account_id } = req.body;
   if (cad_amount == null || commission == null || !confirmed_billing_account_id) {
@@ -155,6 +157,7 @@ router.put('/:id/status', requireRole('editor'), (req, res) => {
   const { status } = req.body;
   const VALID_TRANSITIONS = {
     open:           ['confirmed', 'dispute_opened', 'cancelled'],
+    processing:     ['confirmed', 'open', 'cancelled'],
     dispute_opened: ['dispute_won', 'dispute_lost'],
   };
   const allowed = VALID_TRANSITIONS[existing.status] || [];
@@ -165,6 +168,32 @@ router.put('/:id/status', requireRole('editor'), (req, res) => {
   const updated = db.prepare(`
     SELECT orders.*, billing_accounts.name as billing_account_name
     FROM orders LEFT JOIN billing_accounts ON orders.confirmed_billing_account_id = billing_accounts.id
+    WHERE orders.id = ?
+  `).get(id);
+  res.json(updated);
+});
+
+router.put('/:id/assign', requireRole('admin'), (req, res) => {
+  const { id } = req.params;
+  const existing = db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
+  if (!existing) return res.status(404).json({ error: 'Order not found' });
+
+  const { handler_id } = req.body;
+
+  if (handler_id) {
+    const handler = db.prepare(`SELECT id FROM users WHERE id = ? AND role = 'handler'`).get(handler_id);
+    if (!handler) return res.status(400).json({ error: 'Invalid handler' });
+    db.prepare(`UPDATE orders SET handler_id = ?, status = 'processing' WHERE id = ?`).run(parseInt(handler_id), id);
+  } else {
+    db.prepare(`UPDATE orders SET handler_id = NULL, status = 'open' WHERE id = ?`).run(id);
+  }
+
+  const updated = db.prepare(`
+    SELECT orders.*, billing_accounts.name as billing_account_name,
+           u.username as handler_username
+    FROM orders
+    LEFT JOIN billing_accounts ON orders.confirmed_billing_account_id = billing_accounts.id
+    LEFT JOIN users u ON orders.handler_id = u.id
     WHERE orders.id = ?
   `).get(id);
   res.json(updated);

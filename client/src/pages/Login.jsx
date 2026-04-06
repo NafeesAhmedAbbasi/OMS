@@ -21,6 +21,8 @@ export default function Login() {
         navigate('/admin');
       } else if (res.data.user.role === 'editor') {
         navigate('/editor/dashboard');
+      } else if (res.data.user.role === 'handler') {
+        navigate('/handler/dashboard');
       } else {
         navigate('/deo/orders');
       }    } catch (err) {

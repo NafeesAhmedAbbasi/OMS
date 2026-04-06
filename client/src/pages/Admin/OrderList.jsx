@@ -3,11 +3,12 @@ import api from '../../api';
 import AppLayout from '../../components/AppLayout';
 import OrderModal from '../../components/OrderModal';
 
-const STATUS_OPTIONS = ['open', 'confirmed', 'dispute_opened', 'dispute_won', 'dispute_lost', 'cancelled'];
+const STATUS_OPTIONS = ['open', 'processing', 'confirmed', 'dispute_opened', 'dispute_won', 'dispute_lost', 'cancelled'];
 
 function statusBadgeClass(status) {
   const map = {
     open:           'badge-status-open',
+    processing:     'badge-status-processing',
     confirmed:      'badge-status-confirmed',
     dispute_opened: 'badge-status-dispute',
     dispute_won:    'badge-status-won',
@@ -23,14 +24,19 @@ function formatStatus(s) {
 
 export default function AdminOrderList() {
   const [orders, setOrders]             = useState([]);
+  const [handlers, setHandlers]         = useState([]);
   const [loading, setLoading]           = useState(true);
   const [modal, setModal]               = useState(null);
   const [filterStatus, setFilterStatus] = useState('');
   const [filterShipped, setFilterShipped] = useState('');
+  const [assigning, setAssigning]       = useState({}); // orderId -> selected handler_id
 
   useEffect(() => {
-    api.get('/orders')
-      .then(res => setOrders(res.data))
+    Promise.all([api.get('/orders'), api.get('/handlers')])
+      .then(([ordersRes, handlersRes]) => {
+        setOrders(ordersRes.data);
+        setHandlers(handlersRes.data);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -40,6 +46,23 @@ export default function AdminOrderList() {
 
   const shipped   = orders.filter(o =>  o.shipping_service).length;
   const unshipped = orders.filter(o => !o.shipping_service).length;
+
+  async function handleAssign(orderId) {
+    const handlerId = assigning[orderId];
+    if (!handlerId) return;
+    try {
+      const res = await api.put(`/orders/${orderId}/assign`, { handler_id: handlerId });
+      setOrders(prev => prev.map(o => o.id === orderId ? res.data : o));
+      setAssigning(prev => { const n = { ...prev }; delete n[orderId]; return n; });
+    } catch {}
+  }
+
+  async function handleUnassign(orderId) {
+    try {
+      const res = await api.put(`/orders/${orderId}/assign`, { handler_id: null });
+      setOrders(prev => prev.map(o => o.id === orderId ? res.data : o));
+    } catch {}
+  }
 
   return (
     <AppLayout>
@@ -91,6 +114,7 @@ export default function AdminOrderList() {
                     <th>Customer</th>
                     <th>Source</th>
                     <th>Status</th>
+                    <th>Handler</th>
                     <th>Shipping</th>
                     <th>CAD Amount</th>
                     <th>Net (CAD)</th>
@@ -99,10 +123,10 @@ export default function AdminOrderList() {
                 </thead>
                 <tbody>
                   {filtered.length === 0 && (
-                    <tr><td colSpan="9" className="no-data">No orders.</td></tr>
+                    <tr><td colSpan="10" className="no-data">No orders.</td></tr>
                   )}
                   {filtered.map(o => (
-                    <tr key={o.id} onClick={() => setModal(o)} style={{ cursor: 'pointer' }}>
+                    <tr key={o.id} onClick={e => { if (e.target.closest('.handler-cell')) return; setModal(o); }} style={{ cursor: 'pointer' }}>
                       <td><span className="order-num">{o.order_number}</span></td>
                       <td>{o.date}</td>
                       <td>{o.customer}</td>
@@ -111,6 +135,41 @@ export default function AdminOrderList() {
                         <span className={`badge ${statusBadgeClass(o.status)}`}>
                           {formatStatus(o.status)}
                         </span>
+                      </td>
+                      <td className="handler-cell" onClick={e => e.stopPropagation()}>
+                        {o.handler_id ? (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <span style={{ fontSize: 13, fontWeight: 500, color: '#6366f1' }}>{o.handler_username}</span>
+                            <button
+                              onClick={() => handleUnassign(o.id)}
+                              title="Unassign"
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: 14, lineHeight: 1, padding: '0 2px' }}
+                            >×</button>
+                          </span>
+                        ) : (
+                          handlers.length > 0 ? (
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <select
+                                value={assigning[o.id] || ''}
+                                onChange={e => setAssigning(prev => ({ ...prev, [o.id]: e.target.value }))}
+                                style={{ fontSize: 12, padding: '2px 4px', borderRadius: 4, border: '1px solid #d1d5db' }}
+                              >
+                                <option value="">Select…</option>
+                                {handlers.filter(h => h.is_active).map(h => (
+                                  <option key={h.id} value={h.id}>{h.username}</option>
+                                ))}
+                              </select>
+                              {assigning[o.id] && (
+                                <button
+                                  onClick={e => { e.stopPropagation(); handleAssign(o.id); }}
+                                  style={{ fontSize: 11, padding: '2px 8px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}
+                                >Assign</button>
+                              )}
+                            </span>
+                          ) : (
+                            <span style={{ color: '#9ca3af', fontSize: 12 }}>—</span>
+                          )
+                        )}
                       </td>
                       <td>
                         {o.shipping_service

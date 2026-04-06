@@ -13,6 +13,9 @@ import EditorDashboard from './pages/Editor/Dashboard';
 import EditorOrders from './pages/Editor/Orders';
 import EditorBilling from './pages/Editor/BillingAccounts';
 import EditorTransfers from './pages/Editor/Transfers';
+import HandlerDashboard from './pages/Handler/Dashboard';
+import StoreEnvyImport from './pages/DEO/StoreEnvyImport';
+import AdminSettings from './pages/Admin/Settings';
 import PrivateRoute from './components/PrivateRoute';
 
 export default function App() {
@@ -26,6 +29,9 @@ export default function App() {
         } />
         <Route path="/deo/orders/new" element={
           <PrivateRoute role="deo"><CreateOrder /></PrivateRoute>
+        } />
+        <Route path="/deo/import" element={
+          <PrivateRoute role="deo"><StoreEnvyImport /></PrivateRoute>
         } />
 
         <Route path="/admin" element={
@@ -49,6 +55,9 @@ export default function App() {
         <Route path="/admin/handlers" element={
           <PrivateRoute role="admin"><AdminHandlers /></PrivateRoute>
         } />
+        <Route path="/admin/settings" element={
+          <PrivateRoute role="admin"><AdminSettings /></PrivateRoute>
+        } />
 
         <Route path="/editor/dashboard" element={
           <PrivateRoute role="editor"><EditorDashboard /></PrivateRoute>
@@ -61,6 +70,10 @@ export default function App() {
         } />
         <Route path="/editor/transfers" element={
           <PrivateRoute role="editor"><EditorTransfers /></PrivateRoute>
+        } />
+
+        <Route path="/handler/dashboard" element={
+          <PrivateRoute role="handler"><HandlerDashboard /></PrivateRoute>
         } />
 
         <Route path="*" element={<Navigate to="/login" replace />} />

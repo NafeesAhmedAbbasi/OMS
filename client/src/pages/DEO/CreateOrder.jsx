@@ -121,25 +121,30 @@ export default function CreateOrder() {
             <h2 className="page-title">Create Order</h2>
             <p className="page-subtitle">Fill in the details below</p>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>Order #</label>
-              <input
-                type="number"
-                value={customNumber}
-                onChange={e => { setCustomNumber(e.target.value); setNumberError(''); }}
-                style={{
-                  width: 100, padding: '4px 10px', fontSize: 15, fontWeight: 700,
-                  border: `1.5px solid ${numberError ? '#ef4444' : 'var(--border)'}`,
-                  borderRadius: 8, textAlign: 'center', color: 'var(--primary)',
-                }}
-                min="1"
-              />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button className="btn-ghost" onClick={() => navigate('/deo/import')} style={{ fontSize: 13 }}>
+              ↓ Import from Store Envy
+            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>Order #</label>
+                <input
+                  type="number"
+                  value={customNumber}
+                  onChange={e => { setCustomNumber(e.target.value); setNumberError(''); }}
+                  style={{
+                    width: 100, padding: '4px 10px', fontSize: 15, fontWeight: 700,
+                    border: `1.5px solid ${numberError ? '#ef4444' : 'var(--border)'}`,
+                    borderRadius: 8, textAlign: 'center', color: 'var(--primary)',
+                  }}
+                  min="1"
+                />
+              </div>
+              {customNumber !== nextNumber && !numberError && (
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Next auto: #{nextNumber}</span>
+              )}
+              {numberError && <span style={{ fontSize: 11, color: '#ef4444' }}>{numberError}</span>}
             </div>
-            {customNumber !== nextNumber && !numberError && (
-              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Next auto: #{nextNumber}</span>
-            )}
-            {numberError && <span style={{ fontSize: 11, color: '#ef4444' }}>{numberError}</span>}
           </div>
         </div>
 

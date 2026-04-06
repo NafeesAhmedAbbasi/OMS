@@ -4,6 +4,32 @@ const { authMiddleware, requireRole } = require('../middleware/auth');
 
 const router = express.Router();
 router.use(authMiddleware);
+
+// ── Handler self-view (accessible by handler role) ──
+router.get('/my/dashboard', (req, res) => {
+  if (req.user.role !== 'handler' && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  const handlerId = req.user.id;
+
+  const orders = db.prepare(`
+    SELECT orders.*, u.username as handler_username
+    FROM orders
+    LEFT JOIN users u ON orders.handler_id = u.id
+    WHERE orders.handler_id = ?
+    ORDER BY orders.order_number DESC
+  `).all(handlerId);
+
+  let bills = [], payments = [];
+  try { bills = db.prepare(`SELECT * FROM handler_bills WHERE handler_user_id = ? ORDER BY date DESC`).all(handlerId); } catch {}
+  try { payments = db.prepare(`SELECT * FROM handler_payments WHERE handler_user_id = ? ORDER BY date DESC`).all(handlerId); } catch {}
+
+  const totalBilled = bills.reduce((s, b) => s + (b.total_pkr || 0), 0);
+  const totalPaid   = payments.reduce((s, p) => s + (p.amount_pkr || 0), 0);
+
+  res.json({ orders, bills, payments, totalBilled, totalPaid, balance: totalPaid - totalBilled });
+});
+
 router.use(requireRole('admin'));
 
 // ── Handler list with commissions ──
@@ -12,18 +38,31 @@ router.get('/', (req, res) => {
     `SELECT id, username, is_active FROM users WHERE role = 'handler' ORDER BY username ASC`
   ).all();
 
-  let commissions = [];
+  let commissions = [], bills = [], payments = [], assignedOrders = [];
   try {
     commissions = db.prepare(
       `SELECT hc.handler_user_id, hc.item_type_id, hc.amount_pkr, it.name as item_type_name
        FROM handler_commissions hc JOIN item_types it ON hc.item_type_id = it.id`
     ).all();
-  } catch { /* table may not exist yet on older deployments */ }
+  } catch {}
+  try { bills    = db.prepare(`SELECT handler_user_id, total_pkr FROM handler_bills`).all(); } catch {}
+  try { payments = db.prepare(`SELECT handler_user_id, amount_pkr FROM handler_payments`).all(); } catch {}
+  try { assignedOrders = db.prepare(`SELECT handler_id, id FROM orders WHERE handler_id IS NOT NULL`).all(); } catch {}
 
-  res.json(handlers.map(h => ({
-    ...h,
-    commissions: commissions.filter(c => c.handler_user_id === h.id),
-  })));
+  res.json(handlers.map(h => {
+    const hBills    = bills.filter(b => b.handler_user_id === h.id);
+    const hPayments = payments.filter(p => p.handler_user_id === h.id);
+    const totalBilled = hBills.reduce((s, b) => s + (b.total_pkr || 0), 0);
+    const totalPaid   = hPayments.reduce((s, p) => s + (p.amount_pkr || 0), 0);
+    return {
+      ...h,
+      commissions: commissions.filter(c => c.handler_user_id === h.id),
+      totalBilled,
+      totalPaid,
+      balance: totalPaid - totalBilled,
+      assignedOrderCount: assignedOrders.filter(o => o.handler_id === h.id).length,
+    };
+  }));
 });
 
 // ── Save commissions ──
@@ -52,14 +91,21 @@ router.get('/:id/balance', (req, res) => {
   const handler = db.prepare(`SELECT id, username FROM users WHERE id = ? AND role = 'handler'`).get(id);
   if (!handler) return res.status(404).json({ error: 'Handler not found' });
 
-  let bills = [], payments = [];
+  let bills = [], payments = [], orders = [];
   try { bills = db.prepare(`SELECT * FROM handler_bills WHERE handler_user_id = ? ORDER BY date DESC`).all(id); } catch {}
   try { payments = db.prepare(`SELECT * FROM handler_payments WHERE handler_user_id = ? ORDER BY date DESC`).all(id); } catch {}
+  try {
+    orders = db.prepare(`SELECT id, order_number, date, customer, shoes_type, status FROM orders WHERE handler_id = ? ORDER BY order_number DESC`).all(id);
+  } catch {}
+
+  // Mark which orders already have a bill
+  const billedOrderIds = new Set(bills.filter(b => b.order_id).map(b => b.order_id));
+  const ordersWithBillStatus = orders.map(o => ({ ...o, hasBill: billedOrderIds.has(o.id) }));
 
   const totalBilled = bills.reduce((s, b) => s + (b.total_pkr || 0), 0);
   const totalPaid   = payments.reduce((s, p) => s + (p.amount_pkr || 0), 0);
 
-  res.json({ handler, bills, payments, totalBilled, totalPaid, balance: totalPaid - totalBilled });
+  res.json({ handler, orders: ordersWithBillStatus, bills, payments, totalBilled, totalPaid, balance: totalPaid - totalBilled });
 });
 
 // ── Add bill for a handler ──

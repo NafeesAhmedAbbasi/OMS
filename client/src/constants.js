@@ -1,4 +1,4 @@
-export const SOURCES = ['TLH', 'Lajuria', 'UHMLS'];
+export const SOURCES = ['TLH', 'Lajuria', 'UHMLS', 'Store Envy'];
 
 export const SHOES_TYPES = [
   'Dress Shoes',
@@ -11,7 +11,7 @@ export const SHOES_TYPES = [
 
 export const SHIPPING_SERVICES = ['FedEx', 'DHL', 'Local-Post', 'Skynet'];
 
-export const PAYMENT_METHODS = ['Stripe', 'PayPal'];
+export const PAYMENT_METHODS = ['Stripe', 'PayPal', 'Store Envy'];
 
 export const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
