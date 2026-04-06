@@ -4,7 +4,13 @@ import api from '../../api';
 import AppLayout from '../../components/AppLayout';
 import OrderModal from '../../components/OrderModal';
 import OrderCard from '../../components/OrderCard';
-import { SOURCES, MONTHS } from '../../constants';
+import { SOURCES, MONTHS, CLOTHING_KEYWORDS } from '../../constants';
+
+function isClothingType(name) {
+  if (!name) return false;
+  const lower = name.toLowerCase();
+  return CLOTHING_KEYWORDS.some(kw => lower.includes(kw));
+}
 
 function formatDate(dateStr) {
   if (!dateStr) return '—';
@@ -18,23 +24,60 @@ function getWeekNumber(dateStr) {
   return Math.ceil(((d - jan1) / 86400000 + jan1.getDay() + 1) / 7);
 }
 
+function statusDot(status) {
+  const map = {
+    open:           { color: '#f59e0b', title: 'Open' },
+    confirmed:      { color: '#10b981', title: 'Confirmed' },
+    dispute_opened: { color: '#ef4444', title: 'Dispute Opened' },
+    dispute_won:    { color: '#6366f1', title: 'Dispute Won' },
+    dispute_lost:   { color: '#94a3b8', title: 'Dispute Lost' },
+    cancelled:      { color: '#cbd5e1', title: 'Cancelled' },
+  };
+  const s = map[status] || { color: '#f59e0b', title: 'Open' };
+  return (
+    <span
+      title={s.title}
+      style={{
+        display: 'inline-block',
+        width: 10, height: 10,
+        borderRadius: '50%',
+        background: s.color,
+        flexShrink: 0,
+      }}
+    />
+  );
+}
+
 function sourceBadgeClass(source) {
   const map = { TLH: 'badge-tlh', Lajuria: 'badge-lajuria', UHMLS: 'badge-uhmls' };
   return map[source] || 'badge-none';
+}
+
+function isShippingDelayed(order) {
+  if (order.shipping_service) return false; // already shipped
+  if (!order.date) return false;
+  const orderDate = new Date(order.date);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diffDays = Math.floor((today - orderDate) / 86400000);
+  return diffDays > 14;
 }
 
 export default function OrderList() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [modal, setModal] = useState(null);   // { order, mode }
+  const [modal, setModal] = useState(null);
   const [cardOrder, setCardOrder] = useState(null);
+  const user = JSON.parse(localStorage.getItem('user') || 'null');
+  const isDeo = user?.role === 'deo';
 
   // Filters
   const [filterYear, setFilterYear] = useState('');
   const [filterMonth, setFilterMonth] = useState('');
   const [filterWeek, setFilterWeek] = useState('');
   const [filterSource, setFilterSource] = useState('');
+  const [filterDelayed, setFilterDelayed] = useState(false);
 
   useEffect(() => {
     api.get('/orders')
@@ -68,6 +111,7 @@ export default function OrderList() {
       if (filterMonth && m !== filterMonth.padStart(2, '0')) return false;
       if (filterWeek && getWeekNumber(o.date) !== parseInt(filterWeek)) return false;
       if (filterSource && o.source !== filterSource) return false;
+      if (filterDelayed && !isShippingDelayed(o)) return false;
       return true;
     });
   }, [orders, filterYear, filterMonth, filterWeek, filterSource]);
@@ -80,10 +124,10 @@ export default function OrderList() {
   }
 
   function clearFilters() {
-    setFilterYear(''); setFilterMonth(''); setFilterWeek(''); setFilterSource('');
+    setFilterYear(''); setFilterMonth(''); setFilterWeek(''); setFilterSource(''); setFilterDelayed(false);
   }
 
-  const hasFilters = filterYear || filterMonth || filterWeek || filterSource;
+  const hasFilters = filterYear || filterMonth || filterWeek || filterSource || filterDelayed;
 
   return (
     <AppLayout>
@@ -133,6 +177,18 @@ export default function OrderList() {
             {hasFilters && (
               <button className="btn-clear-filters" onClick={clearFilters}>Clear filters</button>
             )}
+            <button
+              className="btn-clear-filters"
+              onClick={() => setFilterDelayed(f => !f)}
+              style={{
+                background: filterDelayed ? '#ef4444' : undefined,
+                color: filterDelayed ? '#fff' : undefined,
+                borderColor: filterDelayed ? '#ef4444' : undefined,
+                fontWeight: filterDelayed ? 700 : undefined,
+              }}
+            >
+              {filterDelayed ? '✕ Delayed only' : 'Show delayed'}
+            </button>
           </div>
           <div className="filter-summary">
             <span className="filter-count">
@@ -157,8 +213,8 @@ export default function OrderList() {
                     <th>Order #</th>
                     <th>Customer</th>
                     <th>Store-Ref #</th>
-                    <th>MC (PKR)</th>
-                    <th>SC (PKR)</th>
+                    {!isDeo && <th>MC (PKR)</th>}
+                    {!isDeo && <th>SC (PKR)</th>}
                     <th>Q</th>
                     <th>Tracking</th>
                     <th>Source</th>
@@ -172,7 +228,7 @@ export default function OrderList() {
                 <tbody>
                   {filtered.length === 0 && (
                     <tr>
-                      <td colSpan="15" className="no-data">
+                      <td colSpan={isDeo ? 13 : 15} className="no-data">
                         {hasFilters ? 'No orders match the selected filters.' : 'No orders yet.'}
                       </td>
                     </tr>
@@ -180,29 +236,43 @@ export default function OrderList() {
                   {filtered.map(o => (
                     <tr key={o.id} onClick={() => setModal({ order: o, mode: 'edit' })}>
                       <td className="col-actions" onClick={e => e.stopPropagation()}>
-                        <button
-                          className="btn-eye"
-                          onClick={() => setModal({ order: o, mode: 'view' })}
-                          title="View details"
-                        >
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                            <circle cx="12" cy="12" r="3"/>
-                          </svg>
-                        </button>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {statusDot(o.status)}
+                          {isShippingDelayed(o) && (
+                            <span
+                              title="Shipping delayed — not shipped within 14 days"
+                              style={{
+                                fontSize: 10, fontWeight: 700, color: '#fff',
+                                background: '#ef4444', borderRadius: 4,
+                                padding: '1px 5px', lineHeight: '16px',
+                                flexShrink: 0,
+                              }}
+                            >LATE</span>
+                          )}
+                          <button
+                            className="btn-eye"
+                            onClick={() => setModal({ order: o, mode: 'view' })}
+                            title="View details"
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                              <circle cx="12" cy="12" r="3"/>
+                            </svg>
+                          </button>
+                        </div>
                       </td>
                       <td>{formatDate(o.date)}</td>
                       <td><span className="order-num">{o.order_number}</span></td>
                       <td>{o.customer}</td>
                       <td>{o.store_ref || <span className="text-muted">—</span>}</td>
-                      <td>{o.mc_pkr != null ? Number(o.mc_pkr).toLocaleString() : <span className="text-muted">—</span>}</td>
-                      <td>{o.sc_pkr != null ? Number(o.sc_pkr).toLocaleString() : <span className="text-muted">—</span>}</td>
+                      {!isDeo && <td>{o.mc_pkr != null ? Number(o.mc_pkr).toLocaleString() : <span className="text-muted">—</span>}</td>}
+                      {!isDeo && <td>{o.sc_pkr != null ? Number(o.sc_pkr).toLocaleString() : <span className="text-muted">—</span>}</td>}
                       <td>{o.quantity}</td>
                       <td>{o.tracking || <span className="text-muted">—</span>}</td>
                       <td><span className={`badge ${sourceBadgeClass(o.source)}`}>{o.source}</span></td>
                       <td>{o.shoes_type}</td>
                       <td>{o.country}</td>
-                      <td>US {o.size}</td>
+                      <td>{isClothingType(o.shoes_type) ? o.size : `US ${o.size}`}</td>
                       <td>{o.color}</td>
                       <td className="col-generate" onClick={e => e.stopPropagation()}>
                         <button

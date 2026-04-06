@@ -26,6 +26,43 @@ export default function OrderModal({ order, initialMode = 'view', onClose, onSav
   const [imagePreview, setImagePreview] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [partialRefund, setPartialRefund] = useState('');
+  const [statusSaving, setStatusSaving] = useState(false);
+
+  const user = JSON.parse(localStorage.getItem('user') || 'null');
+  const isEditor = user?.role === 'editor' || user?.role === 'admin';
+
+  const STATUS_TRANSITIONS = {
+    open:           ['confirmed', 'dispute_opened', 'cancelled'],
+    dispute_opened: ['dispute_won', 'dispute_lost'],
+    confirmed:      [],
+    dispute_won:    [],
+    dispute_lost:   [],
+    cancelled:      [],
+  };
+
+  const STATUS_LABELS = {
+    confirmed:      { label: 'Mark Confirmed',   color: '#10b981' },
+    dispute_opened: { label: 'Open Dispute',      color: '#ef4444' },
+    dispute_won:    { label: 'Dispute Won',        color: '#6366f1' },
+    dispute_lost:   { label: 'Dispute Lost',       color: '#94a3b8' },
+    cancelled:      { label: 'Cancel Order',       color: '#64748b' },
+  };
+
+  async function handleStatusChange(status) {
+    setStatusSaving(true);
+    setError('');
+    try {
+      const body = { status };
+      if (partialRefund) body.partial_refund = parseFloat(partialRefund);
+      const res = await api.put(`/orders/${order.id}/status`, body);
+      onSaved(res.data);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to update status');
+    } finally {
+      setStatusSaving(false);
+    }
+  }
 
   useEffect(() => {
     if (!order) return;
@@ -178,6 +215,53 @@ export default function OrderModal({ order, initialMode = 'view', onClose, onSav
                     <a href={order.image_path} target="_blank" rel="noreferrer">
                       <img src={order.image_path} alt="Order" className="detail-image" />
                     </a>
+                  </div>
+                )}
+                {isEditor && (
+                  <div className="detail-section" style={{ marginTop: 8 }}>
+                    <div className="detail-section-title">Manage Status</div>
+                    <DetailRow
+                      label="Current Status"
+                      value={<span style={{ fontWeight: 600, textTransform: 'capitalize' }}>{(order.status || 'open').replace(/_/g, ' ')}</span>}
+                    />
+                    {order.cad_amount != null && (
+                      <>
+                        <DetailRow label="CAD Amount"  value={`CA$${Number(order.cad_amount).toFixed(2)}`} />
+                        <DetailRow label="Commission"  value={`CA$${Number(order.commission).toFixed(2)}`} />
+                        <DetailRow label="Net Amount"  value={`CA$${Number(order.net_amount).toFixed(2)}`} highlight />
+                      </>
+                    )}
+                    {(STATUS_TRANSITIONS[order.status || 'open'] || []).length > 0 && (
+                      <div style={{ marginTop: 12 }}>
+                        {(order.status === 'dispute_opened') && (
+                          <div className="form-group" style={{ marginBottom: 10 }}>
+                            <label>Partial Refund (CAD) — optional</label>
+                            <input
+                              type="number" step="0.01" min="0"
+                              value={partialRefund}
+                              onChange={e => setPartialRefund(e.target.value)}
+                              placeholder="e.g. 20.00"
+                            />
+                          </div>
+                        )}
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          {(STATUS_TRANSITIONS[order.status || 'open'] || []).map(s => (
+                            <button
+                              key={s}
+                              disabled={statusSaving}
+                              onClick={() => handleStatusChange(s)}
+                              style={{
+                                padding: '6px 14px', borderRadius: 6, border: 'none',
+                                background: STATUS_LABELS[s]?.color || '#64748b',
+                                color: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer',
+                              }}
+                            >
+                              {STATUS_LABELS[s]?.label || s}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

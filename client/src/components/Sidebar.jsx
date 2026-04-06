@@ -1,7 +1,66 @@
 import { useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 
-const NAV_ITEMS = [
+const ADMIN_NAV = [
+  {
+    to: '/admin',
+    label: 'Dashboard',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+        <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+      </svg>
+    ),
+  },
+  {
+    to: '/admin/users',
+    label: 'Users',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+        <circle cx="9" cy="7" r="4"/>
+        <path d="M23 21v-2a4 4 0 00-3-3.87"/>
+        <path d="M16 3.13a4 4 0 010 7.75"/>
+      </svg>
+    ),
+  },
+  {
+    to: '/admin/orders',
+    label: 'Orders',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/>
+        <rect x="9" y="3" width="6" height="4" rx="1"/>
+        <line x1="9" y1="12" x2="15" y2="12"/>
+        <line x1="9" y1="16" x2="13" y2="16"/>
+      </svg>
+    ),
+  },
+  {
+    to: '/admin/item-types',
+    label: 'Item Types',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/>
+        <line x1="7" y1="7" x2="7.01" y2="7"/>
+      </svg>
+    ),
+  },
+  {
+    to: '/admin/transfers',
+    label: 'Transfers',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="17" y1="7" x2="3" y2="7"/>
+        <polyline points="7 3 3 7 7 11"/>
+        <line x1="7" y1="17" x2="21" y2="17"/>
+        <polyline points="17 13 21 17 17 21"/>
+      </svg>
+    ),
+  },
+];
+
+const DEO_NAV = [
   {
     to: '/deo/orders',
     label: 'Orders',
@@ -27,8 +86,62 @@ const NAV_ITEMS = [
   },
 ];
 
+const EDITOR_NAV = [
+  {
+    to: '/editor/dashboard',
+    label: 'Dashboard',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+        <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+      </svg>
+    ),
+  },
+  {
+    to: '/editor/orders',
+    label: 'Orders',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/>
+        <rect x="9" y="3" width="6" height="4" rx="1"/>
+        <line x1="9" y1="12" x2="15" y2="12"/>
+        <line x1="9" y1="16" x2="13" y2="16"/>
+      </svg>
+    ),
+  },
+  {
+    to: '/editor/billing',
+    label: 'Billing',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
+        <line x1="1" y1="10" x2="23" y2="10"/>
+      </svg>
+    ),
+  },
+  {
+    to: '/editor/transfers',
+    label: 'Transfers',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="17" y1="7" x2="3" y2="7"/>
+        <polyline points="7 3 3 7 7 11"/>
+        <line x1="7" y1="17" x2="21" y2="17"/>
+        <polyline points="17 13 21 17 17 21"/>
+      </svg>
+    ),
+  },
+];
+
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
+  const location = useLocation();
+
+  const navItems = location.pathname.startsWith('/admin')
+    ? ADMIN_NAV
+    : location.pathname.startsWith('/editor')
+      ? EDITOR_NAV
+      : DEO_NAV;
 
   return (
     <aside className={`sidebar${collapsed ? ' sidebar-collapsed' : ''}`}>
@@ -49,7 +162,7 @@ export default function Sidebar() {
       </button>
 
       <nav className="sidebar-nav">
-        {NAV_ITEMS.map(item => (
+        {navItems.map(item => (
           <NavLink
             key={item.to}
             to={item.to}
@@ -62,12 +175,6 @@ export default function Sidebar() {
           </NavLink>
         ))}
       </nav>
-
-      {!collapsed && (
-        <div className="sidebar-footer">
-          <span className="sidebar-footer-text">More coming soon</span>
-        </div>
-      )}
     </aside>
   );
 }

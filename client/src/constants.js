@@ -18,8 +18,9 @@ export const MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
-// US shoe sizes 5 to 16 in 0.5 increments
+export const BILLING_ACCOUNT_TYPES = ['PayPal', 'Stripe'];
+export const TRANSFER_SERVICES = ['Bank Transfer', 'Wire', 'Interac', 'Other'];
+export const CLOTHING_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', '4XL', '5XL'];
+export const CLOTHING_KEYWORDS = ['jacket', 'coat', 'shirt', 'hoodie', 'sweater', 'pants', 'trouser', 'suit', 'blazer', 'vest', 'top', 'tee'];
 export const SHOE_SIZES = [];
-for (let s = 5; s <= 16; s += 0.5) {
-  SHOE_SIZES.push(String(s % 1 === 0 ? `${s}` : `${s}`));
-}
+for (let s = 5; s <= 16; s += 0.5) SHOE_SIZES.push(String(s));

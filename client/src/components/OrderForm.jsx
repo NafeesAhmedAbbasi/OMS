@@ -1,6 +1,23 @@
-import { SOURCES, SHOES_TYPES, SHIPPING_SERVICES, SHOE_SIZES, PAYMENT_METHODS } from '../constants';
+import { useEffect, useState } from 'react';
+import { SOURCES, SHIPPING_SERVICES, SHOE_SIZES, CLOTHING_SIZES, CLOTHING_KEYWORDS, PAYMENT_METHODS } from '../constants';
+import api from '../api';
+
+function isClothingType(typeName) {
+  if (!typeName) return false;
+  const lower = typeName.toLowerCase();
+  return CLOTHING_KEYWORDS.some(kw => lower.includes(kw));
+}
 
 export default function OrderForm({ form, onChange, onImageChange, imagePreview, compact = false }) {
+  const [itemTypes, setItemTypes] = useState([]);
+
+  useEffect(() => {
+    api.get('/item-types').then(res => setItemTypes(res.data));
+  }, []);
+
+  const clothing = isClothingType(form.shoes_type);
+  const sizes    = clothing ? CLOTHING_SIZES : SHOE_SIZES;
+  const sizeLabel = clothing ? 'Size' : 'Size (US)';
   return (
     <div className={`form-grid${compact ? ' compact' : ''}`}>
 
@@ -30,18 +47,27 @@ export default function OrderForm({ form, onChange, onImageChange, imagePreview,
       </div>
 
       <div className="form-group">
-        <label>Shoes Type <span className="required">*</span></label>
-        <select name="shoes_type" value={form.shoes_type} onChange={onChange} required>
+        <label>Item Type <span className="required">*</span></label>
+        <select name="shoes_type" value={form.shoes_type} onChange={e => {
+          onChange(e);
+          // clear size when type category changes
+          const wasClothing = isClothingType(form.shoes_type);
+          const nowClothing = isClothingType(e.target.value);
+          if (wasClothing !== nowClothing) onChange({ target: { name: 'size', value: '' } });
+        }} required>
           <option value="">Select type</option>
-          {SHOES_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+          {itemTypes.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
         </select>
       </div>
 
       <div className="form-group">
-        <label>Size <span className="required">*</span></label>
+        <label>{sizeLabel} <span className="required">*</span></label>
         <select name="size" value={form.size} onChange={onChange} required>
           <option value="">Select size</option>
-          {SHOE_SIZES.map(s => <option key={s} value={s}>US {s}</option>)}
+          {clothing
+            ? sizes.map(s => <option key={s} value={s}>{s}</option>)
+            : sizes.map(s => <option key={s} value={s}>US {s}</option>)
+          }
         </select>
       </div>
 

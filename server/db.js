@@ -11,6 +11,27 @@ db.exec(`
     role TEXT NOT NULL CHECK(role IN ('admin', 'deo'))
   );
 
+  CREATE TABLE IF NOT EXISTS billing_accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL CHECK(type IN ('PayPal', 'Stripe')),
+    email TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS transfers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    billing_account_id INTEGER NOT NULL REFERENCES billing_accounts(id),
+    amount REAL NOT NULL,
+    commission REAL NOT NULL,
+    total_deducted REAL NOT NULL,
+    date TEXT NOT NULL,
+    service TEXT NOT NULL,
+    tracking TEXT,
+    comment TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
   CREATE TABLE IF NOT EXISTS orders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     order_number INTEGER UNIQUE NOT NULL,
@@ -39,6 +60,20 @@ const migrations = [
   `ALTER TABLE orders ADD COLUMN order_amount REAL`,
   `ALTER TABLE orders ADD COLUMN payment_method TEXT`,
   `ALTER TABLE orders ADD COLUMN shipping_address TEXT`,
+  `ALTER TABLE orders ADD COLUMN status TEXT NOT NULL DEFAULT 'open'`,
+  `ALTER TABLE orders ADD COLUMN cad_amount REAL`,
+  `ALTER TABLE orders ADD COLUMN commission REAL`,
+  `ALTER TABLE orders ADD COLUMN net_amount REAL`,
+  `ALTER TABLE orders ADD COLUMN confirmed_billing_account_id INTEGER REFERENCES billing_accounts(id)`,
+  `ALTER TABLE transfers ADD COLUMN amount_pkr REAL`,
+  // Rebuild users table with full role set + is_active
+  `CREATE TABLE IF NOT EXISTS users_final (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin','deo','editor','handler')), is_active INTEGER NOT NULL DEFAULT 1)`,
+  `INSERT OR IGNORE INTO users_final (id, username, password_hash, role, is_active) SELECT id, username, password_hash, role, COALESCE(is_active, 1) FROM users`,
+  `DROP TABLE IF EXISTS users_old_final`,
+  `ALTER TABLE users RENAME TO users_old_final`,
+  `ALTER TABLE users_final RENAME TO users`,
+  `DROP TABLE IF EXISTS users_old_final`,
+  `CREATE TABLE IF NOT EXISTS item_types (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
 ];
 for (const sql of migrations) {
   try { db.exec(sql); } catch { /* already exists */ }
@@ -49,10 +84,16 @@ const bcrypt = require('bcryptjs');
 const seedUsers = [
   { username: 'admin', password: 'admin123', role: 'admin' },
   { username: 'deo', password: 'deo123', role: 'deo' },
+  { username: 'editor', password: 'editor123', role: 'editor' },
 ];
-const insertUser = db.prepare('INSERT OR IGNORE INTO users (username, password_hash, role) VALUES (?, ?, ?)');
+const insertUser = db.prepare('INSERT OR IGNORE INTO users (username, password_hash, role, is_active) VALUES (?, ?, ?, 1)');
 for (const u of seedUsers) {
   insertUser.run(u.username, bcrypt.hashSync(u.password, 10), u.role);
 }
+
+// Seed default item types
+const seedItemTypes = ['Dress Shoes','Loafers','Cowboy Boot','Oxford Shoes','Oxford / Dress Shoes','Leather Shoes','Jacket'];
+const insertItemType = db.prepare('INSERT OR IGNORE INTO item_types (name) VALUES (?)');
+for (const name of seedItemTypes) insertItemType.run(name);
 
 module.exports = db;

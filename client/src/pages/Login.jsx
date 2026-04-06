@@ -19,10 +19,11 @@ export default function Login() {
       localStorage.setItem('user', JSON.stringify(res.data.user));
       if (res.data.user.role === 'admin') {
         navigate('/admin');
+      } else if (res.data.user.role === 'editor') {
+        navigate('/editor/dashboard');
       } else {
         navigate('/deo/orders');
-      }
-    } catch (err) {
+      }    } catch (err) {
       setError(err.response?.data?.error || 'Login failed');
     } finally {
       setLoading(false);

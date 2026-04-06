@@ -5,6 +5,7 @@ const db = require('./db');
 const users = [
   { username: 'admin', password: 'admin123', role: 'admin' },
   { username: 'deo', password: 'deo123', role: 'deo' },
+  { username: 'editor', password: 'editor123', role: 'editor' },
 ];
 
 const insertUser = db.prepare(

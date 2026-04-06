@@ -22,6 +22,10 @@ router.post('/login', (req, res) => {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
+  if (!user.is_active) {
+    return res.status(403).json({ error: 'Account is deactivated. Contact admin.' });
+  }
+
   const token = jwt.sign(
     { id: user.id, username: user.username, role: user.role },
     JWT_SECRET,

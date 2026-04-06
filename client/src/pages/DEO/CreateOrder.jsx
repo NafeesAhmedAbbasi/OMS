@@ -29,7 +29,9 @@ const EMPTY_FORM = {
 
 export default function CreateOrder() {
   const [form, setForm] = useState(EMPTY_FORM);
-  const [nextNumber, setNextNumber] = useState('...');
+  const [nextNumber, setNextNumber] = useState('');
+  const [customNumber, setCustomNumber] = useState('');
+  const [numberError, setNumberError] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [saving, setSaving] = useState(false);
@@ -37,7 +39,10 @@ export default function CreateOrder() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    api.get('/orders/next-number').then(res => setNextNumber(res.data.next));
+    api.get('/orders/next-number').then(res => {
+      setNextNumber(String(res.data.next));
+      setCustomNumber(String(res.data.next));
+    });
   }, []);
 
   function handleChange(e) {
@@ -63,6 +68,7 @@ export default function CreateOrder() {
     }
     setError('');
     setSuccess('');
+    setNumberError('');
     setSaving(true);
 
     const data = new FormData();
@@ -70,12 +76,17 @@ export default function CreateOrder() {
       if (k === 'image') { if (v) data.append('image', v); }
       else data.append(k, v);
     });
+    if (customNumber && customNumber !== nextNumber) {
+      data.append('order_number', customNumber);
+    }
 
     try {
       const res = await api.post('/orders', data);
       return res.data;
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to save order');
+      const msg = err.response?.data?.error || 'Failed to save order';
+      if (msg.includes('already exists')) setNumberError(msg);
+      else setError(msg);
       return null;
     } finally {
       setSaving(false);
@@ -89,7 +100,10 @@ export default function CreateOrder() {
       setForm({ ...EMPTY_FORM, date: TODAY });
       setImagePreview(null);
       setSuccess(`Order #${saved.order_number} saved successfully.`);
-      api.get('/orders/next-number').then(res => setNextNumber(res.data.next));
+      api.get('/orders/next-number').then(res => {
+        setNextNumber(String(res.data.next));
+        setCustomNumber(String(res.data.next));
+      });
     }
   }
 
@@ -107,7 +121,26 @@ export default function CreateOrder() {
             <h2 className="page-title">Create Order</h2>
             <p className="page-subtitle">Fill in the details below</p>
           </div>
-          <span className="order-number-badge">Order # {nextNumber}</span>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>Order #</label>
+              <input
+                type="number"
+                value={customNumber}
+                onChange={e => { setCustomNumber(e.target.value); setNumberError(''); }}
+                style={{
+                  width: 100, padding: '4px 10px', fontSize: 15, fontWeight: 700,
+                  border: `1.5px solid ${numberError ? '#ef4444' : 'var(--border)'}`,
+                  borderRadius: 8, textAlign: 'center', color: 'var(--primary)',
+                }}
+                min="1"
+              />
+            </div>
+            {customNumber !== nextNumber && !numberError && (
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Next auto: #{nextNumber}</span>
+            )}
+            {numberError && <span style={{ fontSize: 11, color: '#ef4444' }}>{numberError}</span>}
+          </div>
         </div>
 
         {error   && <p className="error-msg">{error}</p>}
