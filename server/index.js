@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 
-require('./db'); // initialize schema
+const { init } = require('./db');
 
 const app = express();
 
@@ -21,4 +21,10 @@ app.use('/api/settings', require('./routes/settings'));
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
 const PORT = process.env.PORT || 3011;
-app.listen(PORT, () => console.log(`OMS server running on http://localhost:${PORT}`));
+
+init().then(() => {
+  app.listen(PORT, () => console.log(`OMS server running on http://localhost:${PORT}`));
+}).catch(err => {
+  console.error('Failed to initialise database:', err);
+  process.exit(1);
+});

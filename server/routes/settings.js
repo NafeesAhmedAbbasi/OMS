@@ -1,32 +1,33 @@
 const express = require('express');
 const https = require('https');
-const db = require('../db');
+const { db } = require('../db');
 const { authMiddleware, requireRole } = require('../middleware/auth');
 
 const router = express.Router();
 router.use(authMiddleware);
 
 // ── Store Envy accounts list (any authenticated user — no keys returned) ──
-router.get('/storenvy-accounts', (req, res) => {
-  const rows = db.prepare('SELECT id, name, created_at FROM storenvy_accounts ORDER BY name ASC').all();
-  res.json(rows); // api_key is never returned
+router.get('/storenvy-accounts', async (req, res) => {
+  const result = await db.execute('SELECT id, name, created_at FROM storenvy_accounts ORDER BY name ASC');
+  res.json(result.rows);
 });
 
-router.post('/storenvy-accounts', requireRole('admin'), (req, res) => {
+router.post('/storenvy-accounts', requireRole('admin'), async (req, res) => {
   const { name, api_key } = req.body;
   if (!name || !api_key) return res.status(400).json({ error: 'name and api_key are required' });
-  const result = db.prepare('INSERT INTO storenvy_accounts (name, api_key) VALUES (?, ?)').run(name.trim(), api_key.trim());
+  const result = await db.execute({ sql: 'INSERT INTO storenvy_accounts (name, api_key) VALUES (?, ?)', args: [name.trim(), api_key.trim()] });
   res.status(201).json({ id: result.lastInsertRowid, name: name.trim() });
 });
 
-router.delete('/storenvy-accounts/:id', requireRole('admin'), (req, res) => {
-  db.prepare('DELETE FROM storenvy_accounts WHERE id = ?').run(req.params.id);
+router.delete('/storenvy-accounts/:id', requireRole('admin'), async (req, res) => {
+  await db.execute({ sql: 'DELETE FROM storenvy_accounts WHERE id = ?', args: [req.params.id] });
   res.json({ success: true });
 });
 
-// ── Proxy: fetch orders from a specific Store Envy account (any authenticated user) ──
-router.get('/storenvy-accounts/:id/orders', (req, res) => {
-  const account = db.prepare('SELECT id, name, api_key FROM storenvy_accounts WHERE id = ?').get(req.params.id);
+// ── Proxy: fetch orders from a specific Store Envy account ──
+router.get('/storenvy-accounts/:id/orders', async (req, res) => {
+  const accountRes = await db.execute({ sql: 'SELECT id, name, api_key FROM storenvy_accounts WHERE id = ?', args: [req.params.id] });
+  const account = accountRes.rows[0];
   if (!account) return res.status(404).json({ error: 'Store Envy account not found' });
 
   const url = `https://api.storenvy.com/v1/orders.json?api_key=${encodeURIComponent(account.api_key)}&per_page=50`;
@@ -42,7 +43,6 @@ router.get('/storenvy-accounts/:id/orders', (req, res) => {
         }
         const ordersArray = parsed?.data?.orders || parsed?.orders || (Array.isArray(parsed) ? parsed : []);
 
-        // Fetch product image for each unique product_id
         const productIds = [...new Set(
           ordersArray.flatMap(o => (o.items || []).map(i => (i.item || i).product_id).filter(Boolean))
         )];
@@ -64,7 +64,6 @@ router.get('/storenvy-accounts/:id/orders', (req, res) => {
           }).on('error', resolve);
         })));
 
-        // Embed image_url onto each order's first item
         const enriched = ordersArray.map(o => ({
           ...o,
           items: (o.items || []).map((entry, idx) => {
@@ -89,7 +88,6 @@ router.get('/storenvy-accounts/:id/orders', (req, res) => {
 router.get('/image-proxy', (req, res) => {
   const { url } = req.query;
   if (!url || !/^https?:\/\//i.test(url)) return res.status(400).json({ error: 'Invalid url' });
-
   const lib = url.startsWith('https') ? https : require('http');
   lib.get(url, (imgRes) => {
     if (imgRes.statusCode !== 200) return res.status(404).end();
@@ -99,16 +97,18 @@ router.get('/image-proxy', (req, res) => {
 });
 
 // ── Generic key-value settings (admin only) ──
-router.get('/:key', requireRole('admin'), (req, res) => {
-  const row = db.prepare('SELECT value FROM app_settings WHERE key = ?').get(req.params.key);
-  res.json({ key: req.params.key, value: row ? row.value : null });
+router.get('/:key', requireRole('admin'), async (req, res) => {
+  const result = await db.execute({ sql: 'SELECT value FROM app_settings WHERE key = ?', args: [req.params.key] });
+  res.json({ key: req.params.key, value: result.rows[0] ? result.rows[0].value : null });
 });
 
-router.put('/:key', requireRole('admin'), (req, res) => {
+router.put('/:key', requireRole('admin'), async (req, res) => {
   const { value } = req.body;
   if (value == null) return res.status(400).json({ error: 'value is required' });
-  db.prepare('INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
-    .run(req.params.key, value);
+  await db.execute({
+    sql: 'INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+    args: [req.params.key, value],
+  });
   res.json({ key: req.params.key, value });
 });
 
