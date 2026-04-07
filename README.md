@@ -105,11 +105,11 @@ Go to `http://localhost:5180/login` and log in with one of the default accounts 
 
 | Username | Password | Role |
 |---|---|---|
-| `admin` | `admin123` | Admin |
-| `deo` | `deo123` | DEO |
-| `editor` | `editor123` | Editor |
+| `admin` | _(set on first run)_ | Admin |
+| `deo` | _(set on first run)_ | DEO |
+| `editor` | _(set on first run)_ | Editor |
 
-> Change these passwords immediately in production.
+> Default passwords are defined in `server/db.js`. Change them immediately after first login.
 
 ---
 
