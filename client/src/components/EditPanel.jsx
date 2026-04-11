@@ -7,6 +7,8 @@ export default function EditPanel({ order, onClose, onSaved }) {
   const [imagePreview, setImagePreview] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [syncMsg, setSyncMsg] = useState('');
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     if (!order) return;
@@ -27,10 +29,12 @@ export default function EditPanel({ order, onClose, onSaved }) {
       shipping_service: order.shipping_service || '',
       order_amount: order.order_amount != null ? String(order.order_amount) : '',
       payment_method: order.payment_method || '',
+      image_url: '',
       image: null,
     });
     setImagePreview(order.image_path ? `/uploads/${order.image_path.split('/').pop()}` : null);
     setError('');
+    setSyncMsg('');
   }, [order]);
 
   function handleChange(e) {
@@ -75,7 +79,22 @@ export default function EditPanel({ order, onClose, onSaved }) {
     }
   }
 
+  async function handleSyncStoreEnvy() {
+    setSyncing(true);
+    setSyncMsg('');
+    try {
+      await api.post(`/orders/${order.id}/sync-storenvy`);
+      setSyncMsg('Shipped status synced to Store Envy.');
+    } catch (err) {
+      setSyncMsg(err.response?.data?.error || 'Sync failed');
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   if (!order || !form) return null;
+
+  const isStoreEnvy = order.source === 'Store Envy' && order.store_ref;
 
   return (
     <>
@@ -98,6 +117,18 @@ export default function EditPanel({ order, onClose, onSaved }) {
             imagePreview={imagePreview}
             compact
           />
+          {isStoreEnvy && order.tracking && (
+            <div style={{ marginTop: 16, padding: '12px 16px', background: 'var(--bg)', borderRadius: 10, border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>Sync shipping to Store Envy</div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Mark order #{order.store_ref} as shipped with tracking {order.tracking}</div>
+                {syncMsg && <div style={{ fontSize: 12, marginTop: 4, color: syncMsg.includes('ynced') ? '#059669' : '#ef4444' }}>{syncMsg}</div>}
+              </div>
+              <button className="btn-ghost btn-sm" onClick={handleSyncStoreEnvy} disabled={syncing} style={{ whiteSpace: 'nowrap' }}>
+                {syncing ? 'Syncing…' : 'Sync Shipped'}
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="edit-panel-footer">

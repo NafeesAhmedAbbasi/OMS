@@ -8,7 +8,7 @@ function isClothingType(typeName) {
   return CLOTHING_KEYWORDS.some(kw => lower.includes(kw));
 }
 
-export default function OrderForm({ form, onChange, onImageChange, imagePreview, compact = false }) {
+export default function OrderForm({ form, onChange, onImageChange, imagePreview, compact = false, hideCosts = false }) {
   const [itemTypes, setItemTypes] = useState([]);
 
   useEffect(() => {
@@ -87,15 +87,19 @@ export default function OrderForm({ form, onChange, onImageChange, imagePreview,
       </div>
 
       {/* ── Costs ── */}
-      <div className="form-group">
-        <label>MC (PKR)</label>
-        <input type="number" name="mc_pkr" value={form.mc_pkr} onChange={onChange} placeholder="Optional" step="0.01" />
-      </div>
+      {!hideCosts && (
+        <div className="form-group">
+          <label>MC (PKR)</label>
+          <input type="number" name="mc_pkr" value={form.mc_pkr} onChange={onChange} placeholder="Optional" step="0.01" />
+        </div>
+      )}
 
-      <div className="form-group">
-        <label>SC (PKR)</label>
-        <input type="number" name="sc_pkr" value={form.sc_pkr} onChange={onChange} placeholder="Optional" step="0.01" />
-      </div>
+      {!hideCosts && (
+        <div className="form-group">
+          <label>SC (PKR)</label>
+          <input type="number" name="sc_pkr" value={form.sc_pkr} onChange={onChange} placeholder="Optional" step="0.01" />
+        </div>
+      )}
 
       {/* ── Payment (hidden in list view) ── */}
       <div className="form-group">
@@ -139,6 +143,17 @@ export default function OrderForm({ form, onChange, onImageChange, imagePreview,
         <label>Image</label>
         <div className="file-input-wrapper">
           <input type="file" accept="image/*" onChange={onImageChange} />
+        </div>
+        <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>or paste URL</span>
+          <input
+            type="url"
+            name="image_url"
+            value={form.image_url || ''}
+            onChange={onChange}
+            placeholder="https://example.com/image.jpg"
+            style={{ flex: 1 }}
+          />
         </div>
         {imagePreview && (
           <div className="image-preview">

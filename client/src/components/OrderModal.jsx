@@ -29,15 +29,21 @@ export default function OrderModal({ order, initialMode = 'view', onClose, onSav
   const [partialRefund, setPartialRefund] = useState('');
   const [statusSaving, setStatusSaving] = useState(false);
 
+  // Cancellation cost override form
+  const [cancelExpanded, setCancelExpanded] = useState(false);
+  const [cancelForm, setCancelForm] = useState({ manufacturing: '', shipping: '', commission: '', note: '' });
+
   const user = JSON.parse(localStorage.getItem('user') || 'null');
   const isEditor = user?.role === 'editor' || user?.role === 'admin';
+  const isAdmin  = user?.role === 'admin';
 
   const STATUS_TRANSITIONS = {
     open:           ['confirmed', 'dispute_opened', 'cancelled'],
-    dispute_opened: ['dispute_won', 'dispute_lost'],
-    confirmed:      [],
-    dispute_won:    [],
-    dispute_lost:   [],
+    processing:     ['confirmed', 'open', 'cancelled'],
+    dispute_opened: ['dispute_won', 'dispute_lost', ...(isAdmin ? ['cancelled'] : [])],
+    confirmed:      isAdmin ? ['cancelled'] : [],
+    dispute_won:    isAdmin ? ['cancelled'] : [],
+    dispute_lost:   isAdmin ? ['cancelled'] : [],
     cancelled:      [],
   };
 
@@ -55,6 +61,12 @@ export default function OrderModal({ order, initialMode = 'view', onClose, onSav
     try {
       const body = { status };
       if (partialRefund) body.partial_refund = parseFloat(partialRefund);
+      if (status === 'cancelled' && isAdmin) {
+        if (cancelForm.manufacturing) body.cancel_manufacturing_pkr = parseFloat(cancelForm.manufacturing);
+        if (cancelForm.shipping)      body.cancel_shipping_pkr      = parseFloat(cancelForm.shipping);
+        if (cancelForm.commission)    body.cancel_commission_pkr    = parseFloat(cancelForm.commission);
+        if (cancelForm.note)          body.cancel_note              = cancelForm.note;
+      }
       const res = await api.put(`/orders/${order.id}/status`, body);
       onSaved(res.data);
     } catch (err) {
@@ -68,6 +80,8 @@ export default function OrderModal({ order, initialMode = 'view', onClose, onSav
     if (!order) return;
     setMode(initialMode);
     setError('');
+    setCancelExpanded(false);
+    setCancelForm({ manufacturing: '', shipping: '', commission: '', note: '' });
     setForm({
       date: order.date || '',
       customer: order.customer || '',
@@ -86,6 +100,7 @@ export default function OrderModal({ order, initialMode = 'view', onClose, onSav
       order_amount: order.order_amount != null ? String(order.order_amount) : '',
       payment_method: order.payment_method || '',
       shipping_address: order.shipping_address || '',
+      image_url: '',
       image: null,
     });
     setImagePreview(order.image_path || null);
@@ -245,7 +260,7 @@ export default function OrderModal({ order, initialMode = 'view', onClose, onSav
                           </div>
                         )}
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                          {(STATUS_TRANSITIONS[order.status || 'open'] || []).map(s => (
+                          {(STATUS_TRANSITIONS[order.status || 'open'] || []).filter(s => s !== 'cancelled').map(s => (
                             <button
                               key={s}
                               disabled={statusSaving}
@@ -259,7 +274,92 @@ export default function OrderModal({ order, initialMode = 'view', onClose, onSav
                               {STATUS_LABELS[s]?.label || s}
                             </button>
                           ))}
+                          {(STATUS_TRANSITIONS[order.status || 'open'] || []).includes('cancelled') && (
+                            <button
+                              disabled={statusSaving}
+                              onClick={() => setCancelExpanded(v => !v)}
+                              style={{
+                                padding: '6px 14px', borderRadius: 6, border: 'none',
+                                background: '#64748b', color: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer',
+                              }}
+                            >
+                              Cancel Order
+                            </button>
+                          )}
                         </div>
+
+                        {/* ── Cancel cost override form ── */}
+                        {cancelExpanded && (
+                          <div style={{ marginTop: 14, padding: '14px 16px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8 }}>
+                            <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4, color: '#991b1b' }}>
+                              Cancellation Costs
+                            </div>
+                            <div style={{ fontSize: 12, color: '#b91c1c', marginBottom: 12 }}>
+                              {order.handler_id
+                                ? 'Enter any costs that still need to be paid to the handler. Leave blank to cancel with zero costs.'
+                                : 'No handler assigned — costs will not create a bill.'}
+                            </div>
+                            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+                              <div className="form-group" style={{ margin: 0, width: 150 }}>
+                                <label>Manufacturing (PKR)</label>
+                                <input
+                                  type="number" min="0" placeholder="0"
+                                  value={cancelForm.manufacturing}
+                                  onChange={e => setCancelForm(f => ({ ...f, manufacturing: e.target.value }))}
+                                />
+                              </div>
+                              <div className="form-group" style={{ margin: 0, width: 150 }}>
+                                <label>Shipping (PKR)</label>
+                                <input
+                                  type="number" min="0" placeholder="0"
+                                  value={cancelForm.shipping}
+                                  onChange={e => setCancelForm(f => ({ ...f, shipping: e.target.value }))}
+                                />
+                              </div>
+                              <div className="form-group" style={{ margin: 0, width: 150 }}>
+                                <label>Commission (PKR)</label>
+                                <input
+                                  type="number" min="0" placeholder="0"
+                                  value={cancelForm.commission}
+                                  onChange={e => setCancelForm(f => ({ ...f, commission: e.target.value }))}
+                                />
+                              </div>
+                              <div className="form-group" style={{ margin: 0, flex: 1, minWidth: 160 }}>
+                                <label>Note</label>
+                                <input
+                                  type="text" placeholder="e.g. Customer returned, paid mfg only"
+                                  value={cancelForm.note}
+                                  onChange={e => setCancelForm(f => ({ ...f, note: e.target.value }))}
+                                />
+                              </div>
+                            </div>
+                            {(cancelForm.manufacturing || cancelForm.shipping || cancelForm.commission) && (
+                              <div style={{ fontSize: 12, color: '#991b1b', marginBottom: 10 }}>
+                                Total cancellation cost: <strong>PKR {(
+                                  (parseFloat(cancelForm.manufacturing) || 0) +
+                                  (parseFloat(cancelForm.shipping) || 0) +
+                                  (parseFloat(cancelForm.commission) || 0)
+                                ).toLocaleString('en-PK')}</strong>
+                                {order.handler_id && ' — will be added to handler bill'}
+                              </div>
+                            )}
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              <button
+                                disabled={statusSaving}
+                                onClick={() => handleStatusChange('cancelled')}
+                                style={{ padding: '6px 16px', borderRadius: 6, border: 'none', background: '#dc2626', color: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
+                              >
+                                {statusSaving ? 'Cancelling…' : 'Confirm Cancellation'}
+                              </button>
+                              <button
+                                onClick={() => setCancelExpanded(false)}
+                                style={{ padding: '6px 14px', borderRadius: 6, border: '1px solid #d1d5db', background: 'none', fontWeight: 500, fontSize: 13, cursor: 'pointer' }}
+                              >
+                                Back
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

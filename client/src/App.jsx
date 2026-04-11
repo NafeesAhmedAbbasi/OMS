@@ -9,11 +9,13 @@ import AdminOrders from './pages/Admin/Orders';
 import AdminOrderList from './pages/Admin/OrderList';
 import AdminItemTypes from './pages/Admin/ItemTypes';
 import AdminHandlers from './pages/Admin/Handlers';
+import AdminHandlerDetail from './pages/Admin/HandlerDetail';
 import EditorDashboard from './pages/Editor/Dashboard';
 import EditorOrders from './pages/Editor/Orders';
 import EditorBilling from './pages/Editor/BillingAccounts';
 import EditorTransfers from './pages/Editor/Transfers';
 import HandlerDashboard from './pages/Handler/Dashboard';
+import HandlerWorkers from './pages/Handler/Workers';
 import StoreEnvyImport from './pages/DEO/StoreEnvyImport';
 import AdminSettings from './pages/Admin/Settings';
 import PrivateRoute from './components/PrivateRoute';
@@ -55,6 +57,9 @@ export default function App() {
         <Route path="/admin/handlers" element={
           <PrivateRoute role="admin"><AdminHandlers /></PrivateRoute>
         } />
+        <Route path="/admin/handlers/:id" element={
+          <PrivateRoute role="admin"><AdminHandlerDetail /></PrivateRoute>
+        } />
         <Route path="/admin/settings" element={
           <PrivateRoute role="admin"><AdminSettings /></PrivateRoute>
         } />
@@ -74,6 +79,9 @@ export default function App() {
 
         <Route path="/handler/dashboard" element={
           <PrivateRoute role="handler"><HandlerDashboard /></PrivateRoute>
+        } />
+        <Route path="/handler/workers" element={
+          <PrivateRoute role="handler"><HandlerWorkers /></PrivateRoute>
         } />
 
         <Route path="*" element={<Navigate to="/login" replace />} />

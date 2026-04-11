@@ -24,6 +24,7 @@ const EMPTY_FORM = {
   order_amount: '',
   payment_method: '',
   shipping_address: '',
+  image_url: '',
   image: null,
 };
 
@@ -157,6 +158,7 @@ export default function CreateOrder() {
             onChange={handleChange}
             onImageChange={handleImageChange}
             imagePreview={imagePreview}
+            hideCosts
           />
 
           <div className="form-actions">

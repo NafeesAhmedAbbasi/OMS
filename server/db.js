@@ -118,6 +118,49 @@ async function init() {
       api_key TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS handler_commission_rates (
+      handler_user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      rate_per_unit_pkr REAL NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS handler_workers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      handler_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      role TEXT NOT NULL CHECK(role IN ('manufacturer','shipper')),
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS order_worker_assignments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+      worker_id INTEGER NOT NULL REFERENCES handler_workers(id) ON DELETE CASCADE,
+      role TEXT NOT NULL CHECK(role IN ('manufacturer','shipper')),
+      rate_per_unit_pkr REAL NOT NULL DEFAULT 0,
+      UNIQUE(order_id, role)
+    );
+
+    CREATE TABLE IF NOT EXISTS worker_payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      worker_id INTEGER NOT NULL REFERENCES handler_workers(id) ON DELETE CASCADE,
+      handler_user_id INTEGER NOT NULL REFERENCES users(id),
+      amount_pkr REAL NOT NULL,
+      date TEXT NOT NULL,
+      note TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS handler_misc_charges (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      handler_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      description TEXT NOT NULL,
+      amount_pkr REAL NOT NULL,
+      date TEXT NOT NULL,
+      note TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 
   // ── Seed default users ──

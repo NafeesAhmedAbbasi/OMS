@@ -4,7 +4,19 @@ import api from '../../api';
 import AppLayout from '../../components/AppLayout';
 import OrderForm from '../../components/OrderForm';
 
-function mapStoreEnvyOrder(o) {
+function guessItemType(productName) {
+  const n = (productName || '').toLowerCase();
+  if (n.includes('jacket') || n.includes('coat'))             return 'Jacket';
+  if (n.includes('loafer'))                                    return 'Loafers';
+  if (n.includes('cowboy') || n.includes('western boot'))     return 'Cowboy Boot';
+  if (n.includes('oxford'))                                    return 'Oxford Shoes';
+  if (n.includes('dress shoe') || n.includes('dress-shoe'))   return 'Dress Shoes';
+  if (n.includes('leather') || n.includes('shoe') || n.includes('shoes')) return 'Leather Shoes';
+  if (n.includes('boot'))                                      return 'Cowboy Boot';
+  return productName || 'Unknown';
+}
+
+function mapStoreEnvyOrder(o, accountName) {
   const addr    = o.address || {};
   const items   = (o.items || []).map(i => i.item || i);
   const first   = items[0] || {};
@@ -18,8 +30,8 @@ function mapStoreEnvyOrder(o) {
     customer:         addr.name || '',
     store_ref:        String(o.id || ''),
     quantity:         String(qty || 1),
-    source:           'Store Envy',
-    shoes_type:       first.product_name || 'Unknown',
+    source:           accountName || 'Store Envy',
+    shoes_type:       guessItemType(first.product_name),
     size,
     color:            'N/A',
     country:          addr.country || '',
@@ -31,9 +43,9 @@ function mapStoreEnvyOrder(o) {
 }
 
 // ── Review modal — shows one order at a time for editing before import ──
-function ReviewModal({ queue, onDone }) {
+function ReviewModal({ queue, accountName, onDone }) {
   const [index, setIndex]           = useState(0);
-  const [form, setForm]             = useState(() => mapStoreEnvyOrder(queue[0]));
+  const [form, setForm]             = useState(() => mapStoreEnvyOrder(queue[0], accountName));
   const [imageFile, setImageFile]   = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [nextNumber, setNextNumber] = useState('');
@@ -49,7 +61,7 @@ function ReviewModal({ queue, onDone }) {
 
   // When index changes, reset form + fetch next number + prefetch image
   useEffect(() => {
-    setForm(mapStoreEnvyOrder(queue[index]));
+    setForm(mapStoreEnvyOrder(queue[index], accountName));
     setImageFile(null);
     setImagePreview(null);
     setError('');
@@ -171,6 +183,7 @@ function ReviewModal({ queue, onDone }) {
             onImageChange={handleImageChange}
             imagePreview={imagePreview}
             compact
+            hideCosts
           />
         </div>
 
@@ -402,7 +415,7 @@ export default function StoreEnvyImport() {
 
       {/* Review modal — rendered outside page-container so it overlays correctly */}
       {reviewQueue && (
-        <ReviewModal queue={reviewQueue} onDone={handleReviewDone} />
+        <ReviewModal queue={reviewQueue} accountName={accounts.find(a => String(a.id) === selectedAccount)?.name} onDone={handleReviewDone} />
       )}
     </AppLayout>
   );
