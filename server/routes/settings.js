@@ -96,6 +96,29 @@ router.get('/image-proxy', (req, res) => {
   }).on('error', () => res.status(500).end());
 });
 
+// ── Order Sources ──
+router.get('/sources', async (req, res) => {
+  const result = await db.execute('SELECT id, name FROM order_sources ORDER BY name ASC');
+  res.json(result.rows);
+});
+
+router.post('/sources', requireRole('admin'), async (req, res) => {
+  const { name } = req.body;
+  if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
+  try {
+    const result = await db.execute({ sql: 'INSERT INTO order_sources (name) VALUES (?)', args: [name.trim()] });
+    res.status(201).json({ id: Number(result.lastInsertRowid), name: name.trim() });
+  } catch (err) {
+    if (err.message?.includes('UNIQUE')) return res.status(409).json({ error: 'Source already exists' });
+    throw err;
+  }
+});
+
+router.delete('/sources/:id', requireRole('admin'), async (req, res) => {
+  await db.execute({ sql: 'DELETE FROM order_sources WHERE id = ?', args: [req.params.id] });
+  res.json({ success: true });
+});
+
 // ── Generic key-value settings (admin only) ──
 router.get('/:key', requireRole('admin'), async (req, res) => {
   const result = await db.execute({ sql: 'SELECT value FROM app_settings WHERE key = ?', args: [req.params.key] });

@@ -4,7 +4,7 @@ import api from '../../api';
 import AppLayout from '../../components/AppLayout';
 import OrderModal from '../../components/OrderModal';
 import OrderCard from '../../components/OrderCard';
-import { SOURCES, MONTHS, CLOTHING_KEYWORDS } from '../../constants';
+import { MONTHS, CLOTHING_KEYWORDS } from '../../constants';
 
 function isClothingType(name) {
   if (!name) return false;
@@ -78,12 +78,14 @@ export default function OrderList() {
   const [filterWeek, setFilterWeek] = useState('');
   const [filterSource, setFilterSource] = useState('');
   const [filterDelayed, setFilterDelayed] = useState(false);
+  const [sources, setSources] = useState([]);
 
   useEffect(() => {
     api.get('/orders')
       .then(res => setOrders(res.data))
       .catch(() => setError('Failed to load orders'))
       .finally(() => setLoading(false));
+    api.get('/settings/sources').then(res => setSources(res.data)).catch(() => {});
   }, []);
 
   const availableYears = useMemo(() => {
@@ -171,7 +173,7 @@ export default function OrderList() {
               <label>Source</label>
               <select value={filterSource} onChange={e => setFilterSource(e.target.value)}>
                 <option value="">All sources</option>
-                {SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
+                {sources.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
               </select>
             </div>
             {hasFilters && (

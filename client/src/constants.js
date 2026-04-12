@@ -1,5 +1,3 @@
-export const SOURCES = ['TLH', 'Lajuria', 'UHMLS', 'Store Envy'];
-
 export const SHOES_TYPES = [
   'Dress Shoes',
   'Loafers',

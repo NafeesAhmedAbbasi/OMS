@@ -23,7 +23,8 @@ export default function EditorDashboard() {
   const countableOrders = orders.filter(o => o.status === 'confirmed' || o.status === 'dispute_won');
   const totalTransferCommission = transfers.reduce((sum, t) => sum + (t.commission || 0), 0);
   const totalTransferred = transfers.reduce((sum, t) => sum + (t.total_deducted || 0), 0);
-  const grandTotal = countableOrders.reduce((sum, o) => sum + (o.net_amount || 0), 0) - totalTransferred;
+  const totalOpeningBalance = accounts.reduce((sum, a) => sum + (a.opening_balance || 0), 0);
+  const grandTotal = totalOpeningBalance + countableOrders.reduce((sum, o) => sum + (o.net_amount || 0), 0) - totalTransferred;
 
   const transfersByAccount = accounts.map(acc => ({
     ...acc,
@@ -34,12 +35,13 @@ export default function EditorDashboard() {
 
   const tilesByAccount = accounts.map(acc => ({
     ...acc,
-    total: countableOrders
-      .filter(o => o.confirmed_billing_account_id === acc.id)
-      .reduce((sum, o) => sum + (o.net_amount || 0), 0)
+    total: (acc.opening_balance || 0)
+      + countableOrders
+          .filter(o => o.confirmed_billing_account_id === acc.id)
+          .reduce((sum, o) => sum + (o.net_amount || 0), 0)
       - transfers
-        .filter(t => t.billing_account_id === acc.id)
-        .reduce((sum, t) => sum + (t.total_deducted || 0), 0),
+          .filter(t => t.billing_account_id === acc.id)
+          .reduce((sum, t) => sum + (t.total_deducted || 0), 0),
   }));
 
   const openOrders = orders.filter(o => o.status === 'open');
@@ -91,6 +93,11 @@ export default function EditorDashboard() {
                   <div className="tile-label">{acc.name}</div>
                   <div className="tile-type">{acc.type} · {acc.email}</div>
                   <div className="tile-amount">CA${acc.total.toFixed(2)}</div>
+                  {acc.opening_balance > 0 && (
+                    <div style={{ fontSize: 12, marginTop: 4, color: 'var(--text-muted)' }}>
+                      Incl. opening balance: <strong style={{ color: '#059669' }}>CA${Number(acc.opening_balance).toFixed(2)}</strong>
+                    </div>
+                  )}
                 </div>
               ))}
               {accounts.length === 0 && (

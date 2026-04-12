@@ -56,6 +56,16 @@ router.get('/my/dashboard', async (req, res) => {
   const workerPayMap = {};
   for (const wp of workerPayRes.rows) workerPayMap[wp.worker_id] = wp.total_paid || 0;
 
+  // Full worker payment history (for dashboard display)
+  const workerPayHistoryRes = await db.execute({
+    sql: `SELECT wp.*, hw.name as worker_name, hw.role as worker_role
+          FROM worker_payments wp
+          JOIN handler_workers hw ON wp.worker_id = hw.id
+          WHERE wp.handler_user_id = ?
+          ORDER BY wp.date DESC`,
+    args: [handlerId],
+  });
+
   // Worker owed = sum of (rate × quantity) for all assignments
   const workerOwedRes = await db.execute({
     sql: `SELECT owa.worker_id, SUM(owa.rate_per_unit_pkr * o.quantity) as total_owed
@@ -94,6 +104,7 @@ router.get('/my/dashboard', async (req, res) => {
     miscCharges: miscRes.rows,
     totalMisc,
     commissionRate,
+    workerPayments: workerPayHistoryRes.rows,
   });
 });
 

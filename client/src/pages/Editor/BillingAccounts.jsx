@@ -3,7 +3,7 @@ import api from '../../api';
 import AppLayout from '../../components/AppLayout';
 import { BILLING_ACCOUNT_TYPES } from '../../constants';
 
-const EMPTY_FORM = { name: '', type: '', email: '' };
+const EMPTY_FORM = { name: '', type: '', email: '', opening_balance: '' };
 
 export default function BillingAccounts() {
   const [accounts, setAccounts] = useState([]);
@@ -27,7 +27,7 @@ export default function BillingAccounts() {
 
   function startEdit(acc) {
     setEditing(acc);
-    setForm({ name: acc.name, type: acc.type, email: acc.email });
+    setForm({ name: acc.name, type: acc.type, email: acc.email, opening_balance: acc.opening_balance != null ? String(acc.opening_balance) : '' });
     setError('');
     setSuccess('');
   }
@@ -114,6 +114,16 @@ export default function BillingAccounts() {
                 onChange={handleChange} placeholder="account@example.com"
               />
             </div>
+            <div className="form-group">
+              <label>Opening Balance (CAD)</label>
+              <input
+                type="number" name="opening_balance" value={form.opening_balance}
+                onChange={handleChange} placeholder="0.00" step="0.01" min="0"
+              />
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                Pre-existing balance before any orders were recorded in the system.
+              </div>
+            </div>
           </div>
           <div className="form-actions">
             {editing && (
@@ -136,6 +146,7 @@ export default function BillingAccounts() {
                     <th>Name</th>
                     <th>Type</th>
                     <th>Email</th>
+                    <th>Opening Balance</th>
                     <th>Created</th>
                     <th></th>
                   </tr>
@@ -149,6 +160,7 @@ export default function BillingAccounts() {
                       <td>{acc.name}</td>
                       <td><span className="badge badge-none">{acc.type}</span></td>
                       <td>{acc.email}</td>
+                      <td>{acc.opening_balance > 0 ? <span style={{ color: '#059669', fontWeight: 600 }}>CA${Number(acc.opening_balance).toFixed(2)}</span> : <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
                       <td>{acc.created_at?.slice(0, 10) || '—'}</td>
                       <td style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                         <button className="btn-secondary btn-sm" onClick={() => startEdit(acc)}>Edit</button>

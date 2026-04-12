@@ -11,9 +11,10 @@ router.get('/', async (req, res) => {
 });
 
 router.post('/', requireRole('editor'), async (req, res) => {
-  const { name, type, email } = req.body;
+  const { name, type, email, opening_balance } = req.body;
   if (!name || !type || !email) return res.status(400).json({ error: 'name, type, and email are required' });
-  const result = await db.execute({ sql: 'INSERT INTO billing_accounts (name, type, email) VALUES (?, ?, ?)', args: [name, type, email] });
+  const ob = parseFloat(opening_balance) || 0;
+  const result = await db.execute({ sql: 'INSERT INTO billing_accounts (name, type, email, opening_balance) VALUES (?, ?, ?, ?)', args: [name, type, email, ob] });
   const created = await db.execute({ sql: 'SELECT * FROM billing_accounts WHERE id = ?', args: [result.lastInsertRowid] });
   res.status(201).json(created.rows[0]);
 });
@@ -22,9 +23,10 @@ router.put('/:id', requireRole('editor'), async (req, res) => {
   const { id } = req.params;
   const existing = await db.execute({ sql: 'SELECT * FROM billing_accounts WHERE id = ?', args: [id] });
   if (!existing.rows[0]) return res.status(404).json({ error: 'Billing account not found' });
-  const { name, type, email } = req.body;
+  const { name, type, email, opening_balance } = req.body;
   if (!name || !type || !email) return res.status(400).json({ error: 'name, type, and email are required' });
-  await db.execute({ sql: 'UPDATE billing_accounts SET name = ?, type = ?, email = ? WHERE id = ?', args: [name, type, email, id] });
+  const ob = opening_balance != null ? parseFloat(opening_balance) : (existing.rows[0].opening_balance || 0);
+  await db.execute({ sql: 'UPDATE billing_accounts SET name = ?, type = ?, email = ?, opening_balance = ? WHERE id = ?', args: [name, type, email, ob, id] });
   const updated = await db.execute({ sql: 'SELECT * FROM billing_accounts WHERE id = ?', args: [id] });
   res.json(updated.rows[0]);
 });

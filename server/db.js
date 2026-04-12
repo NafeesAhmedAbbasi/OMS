@@ -22,6 +22,7 @@ async function init() {
       name TEXT NOT NULL,
       type TEXT NOT NULL CHECK(type IN ('PayPal','Stripe')),
       email TEXT NOT NULL,
+      opening_balance REAL NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -161,7 +162,18 @@ async function init() {
       note TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS order_sources (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT UNIQUE NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
+
+  // ── Migrations: add columns to existing tables if missing ──
+  try {
+    await db.execute('ALTER TABLE billing_accounts ADD COLUMN opening_balance REAL NOT NULL DEFAULT 0');
+  } catch { /* column already exists */ }
 
   // ── Seed default users ──
   const seedUsers = [
@@ -180,6 +192,12 @@ async function init() {
   const seedItemTypes = ['Dress Shoes','Loafers','Cowboy Boot','Oxford Shoes','Oxford / Dress Shoes','Leather Shoes','Jacket'];
   for (const name of seedItemTypes) {
     await db.execute({ sql: 'INSERT OR IGNORE INTO item_types (name) VALUES (?)', args: [name] });
+  }
+
+  // ── Seed default order sources ──
+  const seedSources = ['TLH', 'Lajuria', 'UHMLS', 'Store Envy'];
+  for (const name of seedSources) {
+    await db.execute({ sql: 'INSERT OR IGNORE INTO order_sources (name) VALUES (?)', args: [name] });
   }
 
   console.log('Database initialised');

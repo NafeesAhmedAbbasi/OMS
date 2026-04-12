@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import * as XLSX from 'xlsx';
 import api from '../../api';
 import AppLayout from '../../components/AppLayout';
 import OrderModal from '../../components/OrderModal';
@@ -64,6 +65,43 @@ export default function AdminOrderList() {
     } catch {}
   }
 
+  function exportExcel() {
+    const rows = filtered.map(o => ({
+      'Order #':         o.order_number,
+      'Date':            o.date,
+      'Customer':        o.customer,
+      'Source':          o.source,
+      'Item Type':       o.shoes_type,
+      'Size':            o.size,
+      'Color':           o.color,
+      'Quantity':        o.quantity,
+      'Country':         o.country,
+      'Store Ref':       o.store_ref || '',
+      'Order Amount (USD)': o.order_amount != null ? Number(o.order_amount) : '',
+      'Payment Method':  o.payment_method || '',
+      'Shipping Service': o.shipping_service || '',
+      'Tracking':        o.tracking || '',
+      'Status':          o.status?.replace(/_/g, ' '),
+      'Handler':         o.handler_username || '',
+      'CAD Amount':      o.cad_amount != null ? Number(o.cad_amount) : '',
+      'Commission':      o.commission != null ? Number(o.commission) : '',
+      'Net (CAD)':       o.net_amount != null ? Number(o.net_amount) : '',
+      'Billing Account': o.billing_account_name || '',
+      'MC (PKR)':        o.mc_pkr != null ? Number(o.mc_pkr) : '',
+      'SC (PKR)':        o.sc_pkr != null ? Number(o.sc_pkr) : '',
+      'Comments':        o.comments || '',
+      'Shipping Address': o.shipping_address || '',
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Orders');
+
+    const label = filterStatus ? `_${filterStatus}` : '';
+    const date  = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `orders${label}_${date}.xlsx`);
+  }
+
   return (
     <AppLayout>
       <div className="page-container">
@@ -74,6 +112,12 @@ export default function AdminOrderList() {
               {shipped} shipped &nbsp;·&nbsp; {unshipped} unshipped &nbsp;·&nbsp; {orders.length} total
             </p>
           </div>
+          <button className="btn-ghost" onClick={exportExcel} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Export Excel
+          </button>
         </div>
 
         <div className="filter-bar">

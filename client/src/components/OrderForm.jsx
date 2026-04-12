@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { SOURCES, SHIPPING_SERVICES, SHOE_SIZES, CLOTHING_SIZES, CLOTHING_KEYWORDS, PAYMENT_METHODS } from '../constants';
+import { SHIPPING_SERVICES, SHOE_SIZES, CLOTHING_SIZES, CLOTHING_KEYWORDS, PAYMENT_METHODS } from '../constants';
 import api from '../api';
 
 function isClothingType(typeName) {
@@ -10,9 +10,11 @@ function isClothingType(typeName) {
 
 export default function OrderForm({ form, onChange, onImageChange, imagePreview, compact = false, hideCosts = false }) {
   const [itemTypes, setItemTypes] = useState([]);
+  const [sources, setSources]     = useState([]);
 
   useEffect(() => {
     api.get('/item-types').then(res => setItemTypes(res.data));
+    api.get('/settings/sources').then(res => setSources(res.data));
   }, []);
 
   const clothing = isClothingType(form.shoes_type);
@@ -42,7 +44,7 @@ export default function OrderForm({ form, onChange, onImageChange, imagePreview,
         <label>Source <span className="required">*</span></label>
         <select name="source" value={form.source} onChange={onChange} required>
           <option value="">Select source</option>
-          {SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
+          {sources.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
         </select>
       </div>
 

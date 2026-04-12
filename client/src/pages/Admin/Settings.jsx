@@ -11,14 +11,25 @@ export default function AdminSettings() {
   const [newName, setNewName]   = useState('');
   const [newKey, setNewKey]     = useState('');
   const [adding, setAdding]     = useState(false);
-  const [testing, setTesting]   = useState(null); // account id being tested
-  const [testResults, setTestResults] = useState({}); // id -> 'ok'|'fail'
+  const [testing, setTesting]   = useState(null);
+  const [testResults, setTestResults] = useState({});
+
+  // Order sources
+  const [sources, setSources]             = useState([]);
+  const [sourcesLoading, setSourcesLoading] = useState(true);
+  const [newSource, setNewSource]         = useState('');
+  const [addingSource, setAddingSource]   = useState(false);
 
   useEffect(() => {
     api.get('/settings/storenvy-accounts')
       .then(res => setAccounts(res.data))
       .catch(() => setError('Failed to load accounts'))
       .finally(() => setLoading(false));
+
+    api.get('/settings/sources')
+      .then(res => setSources(res.data))
+      .catch(() => {})
+      .finally(() => setSourcesLoading(false));
   }, []);
 
   async function addAccount() {
@@ -53,26 +64,96 @@ export default function AdminSettings() {
     } finally { setTesting(null); }
   }
 
+  async function addSource() {
+    if (!newSource.trim()) return setError('Source name is required');
+    setAddingSource(true); setError(''); setSuccess('');
+    try {
+      const res = await api.post('/settings/sources', { name: newSource.trim() });
+      setSources(prev => [...prev, res.data].sort((a, b) => a.name.localeCompare(b.name)));
+      setNewSource('');
+      setSuccess(`"${res.data.name}" added.`);
+    } catch (err) { setError(err.response?.data?.error || 'Failed to add'); }
+    finally { setAddingSource(false); }
+  }
+
+  async function deleteSource(id, name) {
+    if (!window.confirm(`Remove "${name}"? Orders using this source will keep their value.`)) return;
+    try {
+      await api.delete(`/settings/sources/${id}`);
+      setSources(prev => prev.filter(s => s.id !== id));
+    } catch (err) { setError(err.response?.data?.error || 'Failed to delete'); }
+  }
+
   return (
     <AppLayout>
       <div className="page-container">
         <div className="page-header">
           <div>
             <h2 className="page-title">Settings</h2>
-            <p className="page-subtitle">Store Envy integrations</p>
+            <p className="page-subtitle">Store Envy integrations &amp; order sources</p>
           </div>
         </div>
 
         {error   && <p className="error-msg">{error}</p>}
         {success && <p className="success-msg">{success}</p>}
 
+        {/* Order Sources */}
+        <div className="table-card" style={{ padding: 24, maxWidth: 640, marginBottom: 28 }}>
+          <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>Order Sources</div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>
+            These appear in the Source dropdown when creating or editing an order.
+          </div>
+
+          <div style={{ display: 'flex', gap: 10, marginBottom: 20, alignItems: 'flex-end' }}>
+            <div className="form-group" style={{ margin: 0, flex: 1 }}>
+              <label>Source Name</label>
+              <input
+                type="text"
+                value={newSource}
+                onChange={e => setNewSource(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && addSource()}
+                placeholder="e.g. eBay, Instagram"
+              />
+            </div>
+            <button className="btn-primary" onClick={addSource} disabled={addingSource}>
+              {addingSource ? 'Adding…' : 'Add Source'}
+            </button>
+          </div>
+
+          {sourcesLoading ? <div className="loading-state">Loading…</div> : sources.length === 0 ? (
+            <div className="no-data">No sources yet.</div>
+          ) : (
+            <table className="orders-table">
+              <thead>
+                <tr><th>Name</th><th></th></tr>
+              </thead>
+              <tbody>
+                {sources.map(s => (
+                  <tr key={s.id}>
+                    <td><strong>{s.name}</strong></td>
+                    <td>
+                      <button
+                        className="btn-ghost btn-sm"
+                        style={{ color: '#dc2626', borderColor: '#fecaca' }}
+                        onClick={() => deleteSource(s.id, s.name)}
+                      >
+                        Remove
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Store Envy Accounts */}
         <div className="table-card" style={{ padding: 24, maxWidth: 640 }}>
           <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>Store Envy Accounts</div>
           <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>
             Add one account per Store Envy store. DEO can import orders from any of these.
           </div>
 
-          {/* Add form */}
           <div style={{ display: 'flex', gap: 10, marginBottom: 24, flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <div className="form-group" style={{ margin: 0, flex: '1 1 160px' }}>
               <label>Account Name</label>
@@ -89,7 +170,6 @@ export default function AdminSettings() {
             </button>
           </div>
 
-          {/* Accounts list */}
           {loading ? <div className="loading-state">Loading…</div> : accounts.length === 0 ? (
             <div className="no-data">No accounts yet. Add one above.</div>
           ) : (

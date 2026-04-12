@@ -126,7 +126,7 @@ export default function HandlerDashboard() {
   if (loading) return <AppLayout><div className="loading-state">Loading…</div></AppLayout>;
   if (error && !data) return <AppLayout><div className="empty-state">{error}</div></AppLayout>;
 
-  const { orders, bills, payments, totalBilled, totalPaid, balance, workers, assignments, miscCharges, totalMisc, commissionRate } = data;
+  const { orders, bills, payments, totalBilled, totalPaid, balance, workers, assignments, miscCharges, totalMisc, commissionRate, workerPayments } = data;
 
   const manufacturers = (workers || []).filter(w => w.role === 'manufacturer' && w.is_active);
   const shippers      = (workers || []).filter(w => w.role === 'shipper' && w.is_active);
@@ -381,7 +381,7 @@ export default function HandlerDashboard() {
 
         {/* Payments received */}
         {payments.length > 0 && (
-          <div className="table-card">
+          <div className="table-card" style={{ marginBottom: 24 }}>
             <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', fontWeight: 600 }}>
               Payments Received
             </div>
@@ -395,6 +395,41 @@ export default function HandlerDashboard() {
                     <tr key={p.id}>
                       <td>{p.date}</td>
                       <td style={{ fontWeight: 600, color: '#059669' }}>PKR {fmt(p.amount_pkr)}</td>
+                      <td style={{ color: '#6b7280' }}>{p.note || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Worker payments made */}
+        {workerPayments && workerPayments.length > 0 && (
+          <div className="table-card">
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', fontWeight: 600 }}>
+              Payments to Workers
+            </div>
+            <div className="table-wrapper">
+              <table className="orders-table">
+                <thead>
+                  <tr><th>Date</th><th>Worker</th><th>Role</th><th>Amount (PKR)</th><th>Note</th></tr>
+                </thead>
+                <tbody>
+                  {workerPayments.map(p => (
+                    <tr key={p.id}>
+                      <td>{p.date}</td>
+                      <td style={{ fontWeight: 500 }}>{p.worker_name}</td>
+                      <td>
+                        <span style={{
+                          fontSize: 11, padding: '2px 8px', borderRadius: 10, fontWeight: 600,
+                          background: p.worker_role === 'manufacturer' ? '#ede9fe' : '#dbeafe',
+                          color:      p.worker_role === 'manufacturer' ? '#7c3aed'  : '#1d4ed8',
+                        }}>
+                          {p.worker_role === 'manufacturer' ? 'Mfg' : 'Shipper'}
+                        </span>
+                      </td>
+                      <td style={{ fontWeight: 600, color: '#dc2626' }}>PKR {fmt(p.amount_pkr)}</td>
                       <td style={{ color: '#6b7280' }}>{p.note || '—'}</td>
                     </tr>
                   ))}
