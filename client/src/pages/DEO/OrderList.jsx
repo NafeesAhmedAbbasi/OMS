@@ -130,7 +130,7 @@ export default function OrderList() {
 
   const maxSourceCount = sourceStats.length ? sourceStats[0][1] : 1;
 
-
+  function handleSaved(updated) {
     setOrders(prev => prev.map(o => o.id === updated.id ? updated : o));
     setModal(null);
     // keep cardOrder in sync so Generate card shows fresh data
