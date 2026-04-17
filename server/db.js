@@ -130,6 +130,15 @@ async function init() {
       amount_pkr REAL NOT NULL DEFAULT 0
     );
 
+    CREATE TABLE IF NOT EXISTS order_cost_overrides (
+      handler_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+      manufacturing_cost_pkr REAL NOT NULL DEFAULT 0,
+      shipping_cost_pkr REAL NOT NULL DEFAULT 0,
+      commission_pkr REAL NOT NULL DEFAULT 0,
+      PRIMARY KEY (handler_user_id, order_id)
+    );
+
     CREATE TABLE IF NOT EXISTS handler_workers (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       handler_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

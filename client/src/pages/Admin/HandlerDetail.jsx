@@ -24,6 +24,14 @@ export default function HandlerDetail() {
   const [payForm, setPayForm]     = useState(EMPTY_PAY);
   const [paySaving, setPaySaving] = useState(false);
 
+  // Bill editing
+  const [editingBill, setEditingBill] = useState(null);
+  const [editSaving, setEditSaving]   = useState(false);
+
+  // Order cost editing (admin override of mfg/ship/commission)
+  const [editingOrder, setEditingOrder] = useState(null); // { orderId, mfg, ship, commission }
+  const [orderEditSaving, setOrderEditSaving] = useState(false);
+
   useEffect(() => {
     api.get(`/handlers/${id}/balance`)
       .then(res => setBalance(res.data))
@@ -33,6 +41,22 @@ export default function HandlerDetail() {
 
   function prefillBillFromOrder(order) {
     if (!balance) return;
+    // If already billed, find the existing bill and open it in edit mode
+    const existingBill = balance.bills.find(b => b.order_id === order.id || String(b.order_number) === String(order.order_number));
+    if (existingBill) {
+      setEditingBill({
+        id: existingBill.id,
+        date: existingBill.date,
+        order_number: existingBill.order_number || '',
+        item_type: existingBill.item_type || '',
+        shipping_cost_pkr: String(existingBill.shipping_cost_pkr || 0),
+        manufacturing_cost_pkr: String(existingBill.manufacturing_cost_pkr || 0),
+        commission_pkr: String(existingBill.commission_pkr || 0),
+        note: existingBill.note || '',
+      });
+      setTimeout(() => document.getElementById('bills-section')?.scrollIntoView({ behavior: 'smooth' }), 50);
+      return;
+    }
     const assignments = balance.assignments || [];
     const mfgAssign   = assignments.find(a => a.order_id === order.id && a.role === 'manufacturer');
     const shipAssign  = assignments.find(a => a.order_id === order.id && a.role === 'shipper');
@@ -87,6 +111,57 @@ export default function HandlerDetail() {
         };
       });
     } catch (err) { setError(err.response?.data?.error || 'Failed'); }
+  }
+
+  async function saveBillEdit() {
+    setEditSaving(true); setError('');
+    try {
+      const res = await api.put(`/handlers/${id}/bills/${editingBill.id}`, editingBill);
+      const updated = res.data;
+      setBalance(prev => {
+        const oldBill = prev.bills.find(b => b.id === updated.id);
+        const diff = updated.total_pkr - (oldBill?.total_pkr || 0);
+        const updatedBills = prev.bills.map(b => b.id === updated.id ? updated : b);
+        const billedOrderIds = new Set(updatedBills.filter(b => b.order_id).map(b => Number(b.order_id)));
+        return {
+          ...prev,
+          bills: updatedBills,
+          orders: prev.orders.map(o => ({ ...o, hasBill: billedOrderIds.has(o.id) })),
+          totalBilled: prev.totalBilled + diff,
+          balance: prev.balance - diff,
+        };
+      });
+      setEditingBill(null);
+      setSuccess('Bill updated.');
+    } catch (err) { setError(err.response?.data?.error || 'Failed'); }
+    finally { setEditSaving(false); }
+  }
+
+  async function saveOrderCosts() {
+    setOrderEditSaving(true); setError('');
+    try {
+      const { orderId, mfg, ship, commission } = editingOrder;
+      await api.put(`/handlers/${id}/orders/${orderId}/costs`, {
+        manufacturing_cost_pkr: parseFloat(mfg) || 0,
+        shipping_cost_pkr: parseFloat(ship) || 0,
+        commission_pkr: parseFloat(commission) || 0,
+      });
+      // Reflect in prefillBillFromOrder by updating assignments locally
+      setBalance(prev => ({
+        ...prev,
+        costOverrides: {
+          ...(prev.costOverrides || {}),
+          [orderId]: {
+            mfg: parseFloat(mfg) || 0,
+            ship: parseFloat(ship) || 0,
+            commission: parseFloat(commission) || 0,
+          },
+        },
+      }));
+      setEditingOrder(null);
+      setSuccess('Costs updated.');
+    } catch (err) { setError(err.response?.data?.error || 'Failed'); }
+    finally { setOrderEditSaving(false); }
   }
 
   async function addPayment() {
@@ -230,6 +305,41 @@ export default function HandlerDetail() {
                         const mfgA  = assignments.find(a => a.order_id === o.id && a.role === 'manufacturer');
                         const shipA = assignments.find(a => a.order_id === o.id && a.role === 'shipper');
                         const qty   = o.quantity || 1;
+                        const overrides = balance.costOverrides?.[o.id] || balance._orderCostOverrides?.[o.id];
+                        const mfgCost  = overrides ? overrides.mfg  : (mfgA  ? mfgA.rate_per_unit_pkr * qty  : null);
+                        const shipCost = overrides ? overrides.ship : (shipA ? shipA.rate_per_unit_pkr * qty : null);
+                        const commCost = overrides ? overrides.commission : (balance.commissionRate ? balance.commissionRate * qty : null);
+                        const isEditingCosts = editingOrder?.orderId === o.id;
+                        if (isEditingCosts) return (
+                          <tr key={o.id} style={{ background: '#f0f9ff' }}>
+                            <td colSpan={13} style={{ padding: '12px 16px' }}>
+                              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: 'var(--text-secondary)' }}>
+                                Edit Costs — Order #{o.order_number} · {o.customer} · Qty {o.quantity || 1}
+                              </div>
+                              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                                <div className="form-group" style={{ margin: 0, minWidth: 150 }}>
+                                  <label style={{ fontSize: 11 }}>Manufacturing (PKR)</label>
+                                  <input type="number" value={editingOrder.mfg} onChange={e => setEditingOrder(f => ({ ...f, mfg: e.target.value }))} min="0" placeholder="0" />
+                                </div>
+                                <div className="form-group" style={{ margin: 0, minWidth: 150 }}>
+                                  <label style={{ fontSize: 11 }}>Shipping (PKR)</label>
+                                  <input type="number" value={editingOrder.ship} onChange={e => setEditingOrder(f => ({ ...f, ship: e.target.value }))} min="0" placeholder="0" />
+                                </div>
+                                <div className="form-group" style={{ margin: 0, minWidth: 150 }}>
+                                  <label style={{ fontSize: 11 }}>Commission (PKR)</label>
+                                  <input type="number" value={editingOrder.commission} onChange={e => setEditingOrder(f => ({ ...f, commission: e.target.value }))} min="0" placeholder="0" />
+                                </div>
+                              </div>
+                              <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <div style={{ fontSize: 13, color: '#dc2626', fontWeight: 600 }}>
+                                  Total: PKR {fmt((parseFloat(editingOrder.mfg)||0)+(parseFloat(editingOrder.ship)||0)+(parseFloat(editingOrder.commission)||0))}
+                                </div>
+                                <button className="btn-primary btn-sm" onClick={saveOrderCosts} disabled={orderEditSaving}>{orderEditSaving ? 'Saving…' : 'Save'}</button>
+                                <button className="btn-ghost btn-sm" onClick={() => setEditingOrder(null)}>Cancel</button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
                         return (
                           <tr key={o.id}>
                             <td><span className="order-num">{o.order_number}</span></td>
@@ -254,20 +364,25 @@ export default function HandlerDetail() {
                                 </div>
                               ) : <span style={{ color: '#9ca3af', fontSize: 11 }}>—</span>}
                             </td>
-                            <td style={{ fontSize: 12 }}>{mfgA  ? fmt(mfgA.rate_per_unit_pkr * qty)          : '—'}</td>
-                            <td style={{ fontSize: 12 }}>{shipA ? fmt(shipA.rate_per_unit_pkr * qty)         : '—'}</td>
-                            <td style={{ fontSize: 12 }}>{balance.commissionRate ? fmt(balance.commissionRate * qty) : '—'}</td>
+                            <td style={{ fontSize: 12 }}>
+                              {mfgCost != null ? fmt(mfgCost) : '—'}
+                            </td>
+                            <td style={{ fontSize: 12 }}>
+                              {shipCost != null ? fmt(shipCost) : '—'}
+                            </td>
+                            <td style={{ fontSize: 12 }}>
+                              {commCost != null ? fmt(commCost) : '—'}
+                            </td>
                             <td>
                               {o.hasBill
                                 ? <span style={{ fontSize: 11, color: '#059669', fontWeight: 600 }}>✓ Billed</span>
                                 : <span style={{ fontSize: 11, color: '#f59e0b', fontWeight: 600 }}>Pending</span>}
                             </td>
                             <td>
-                              {!o.hasBill && (
-                                <button className="btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={() => prefillBillFromOrder(o)}>
-                                  Add Bill
-                                </button>
-                              )}
+                              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                                <button className="btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={() => setEditingOrder({ orderId: o.id, mfg: String(mfgCost ?? ''), ship: String(shipCost ?? ''), commission: String(commCost ?? '') })}>Costs</button>
+                                <button className="btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={() => prefillBillFromOrder(o)}>{o.hasBill ? 'Edit Bill' : 'Add Bill'}</button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -354,7 +469,7 @@ export default function HandlerDetail() {
             </div>
 
             {/* ── Bills table ── */}
-            <div className="table-card" style={{ marginBottom: 28 }}>
+            <div className="table-card" style={{ marginBottom: 28 }} id="bills-section">
               <div style={{ padding: '14px 20px', borderBottom: '1px solid #f1f5f9', fontWeight: 600 }}>
                 Bills ({balance.bills.length})
               </div>
@@ -365,19 +480,70 @@ export default function HandlerDetail() {
                   <table className="orders-table">
                     <thead><tr><th>Date</th><th>Order #</th><th>Item</th><th>Shipping</th><th>Mfg</th><th>Commission</th><th>Total</th><th>Note</th><th></th></tr></thead>
                     <tbody>
-                      {balance.bills.map(b => (
-                        <tr key={b.id}>
-                          <td>{b.date}</td>
-                          <td>{b.order_number || <span className="text-muted">—</span>}</td>
-                          <td>{b.item_type || <span className="text-muted">—</span>}</td>
-                          <td>{fmt(b.shipping_cost_pkr)}</td>
-                          <td>{fmt(b.manufacturing_cost_pkr)}</td>
-                          <td>{fmt(b.commission_pkr)}</td>
-                          <td><strong style={{ color: '#dc2626' }}>PKR {fmt(b.total_pkr)}</strong></td>
-                          <td>{b.note || <span className="text-muted">—</span>}</td>
-                          <td><button className="btn-ghost btn-sm" style={{ borderColor: '#fecaca', color: '#dc2626' }} onClick={() => deleteBill(b)}>✕</button></td>
-                        </tr>
-                      ))}
+                      {balance.bills.map(b => {
+                        const isEditing = editingBill?.id === b.id;
+                        if (isEditing) return (
+                          <tr key={b.id} style={{ background: '#f0f9ff' }}>
+                            <td colSpan={9} style={{ padding: '12px 16px' }}>
+                              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                                <div className="form-group" style={{ margin: 0, minWidth: 120 }}>
+                                  <label style={{ fontSize: 11 }}>Date</label>
+                                  <input type="date" value={editingBill.date} onChange={e => setEditingBill(f => ({ ...f, date: e.target.value }))} />
+                                </div>
+                                <div className="form-group" style={{ margin: 0, minWidth: 90 }}>
+                                  <label style={{ fontSize: 11 }}>Order #</label>
+                                  <input type="text" value={editingBill.order_number} onChange={e => setEditingBill(f => ({ ...f, order_number: e.target.value }))} placeholder="—" />
+                                </div>
+                                <div className="form-group" style={{ margin: 0, minWidth: 110 }}>
+                                  <label style={{ fontSize: 11 }}>Item Type</label>
+                                  <input type="text" value={editingBill.item_type} onChange={e => setEditingBill(f => ({ ...f, item_type: e.target.value }))} placeholder="—" />
+                                </div>
+                                <div className="form-group" style={{ margin: 0, minWidth: 110 }}>
+                                  <label style={{ fontSize: 11 }}>Shipping (PKR)</label>
+                                  <input type="number" value={editingBill.shipping_cost_pkr} onChange={e => setEditingBill(f => ({ ...f, shipping_cost_pkr: e.target.value }))} min="0" />
+                                </div>
+                                <div className="form-group" style={{ margin: 0, minWidth: 130 }}>
+                                  <label style={{ fontSize: 11 }}>Manufacturing (PKR)</label>
+                                  <input type="number" value={editingBill.manufacturing_cost_pkr} onChange={e => setEditingBill(f => ({ ...f, manufacturing_cost_pkr: e.target.value }))} min="0" />
+                                </div>
+                                <div className="form-group" style={{ margin: 0, minWidth: 120 }}>
+                                  <label style={{ fontSize: 11 }}>Commission (PKR)</label>
+                                  <input type="number" value={editingBill.commission_pkr} onChange={e => setEditingBill(f => ({ ...f, commission_pkr: e.target.value }))} min="0" />
+                                </div>
+                                <div className="form-group" style={{ margin: 0, flex: 1, minWidth: 140 }}>
+                                  <label style={{ fontSize: 11 }}>Note</label>
+                                  <input type="text" value={editingBill.note} onChange={e => setEditingBill(f => ({ ...f, note: e.target.value }))} placeholder="Optional" />
+                                </div>
+                              </div>
+                              <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <div style={{ fontSize: 13, color: '#dc2626', fontWeight: 600 }}>
+                                  Total: PKR {fmt((parseFloat(editingBill.shipping_cost_pkr)||0)+(parseFloat(editingBill.manufacturing_cost_pkr)||0)+(parseFloat(editingBill.commission_pkr)||0))}
+                                </div>
+                                <button className="btn-primary btn-sm" onClick={saveBillEdit} disabled={editSaving}>{editSaving ? 'Saving…' : 'Save'}</button>
+                                <button className="btn-ghost btn-sm" onClick={() => setEditingBill(null)}>Cancel</button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                        return (
+                          <tr key={b.id}>
+                            <td>{b.date}</td>
+                            <td>{b.order_number || <span className="text-muted">—</span>}</td>
+                            <td>{b.item_type || <span className="text-muted">—</span>}</td>
+                            <td>{fmt(b.shipping_cost_pkr)}</td>
+                            <td>{fmt(b.manufacturing_cost_pkr)}</td>
+                            <td>{fmt(b.commission_pkr)}</td>
+                            <td><strong style={{ color: '#dc2626' }}>PKR {fmt(b.total_pkr)}</strong></td>
+                            <td>{b.note || <span className="text-muted">—</span>}</td>
+                            <td>
+                              <div style={{ display: 'flex', gap: 4 }}>
+                                <button className="btn-ghost btn-sm" onClick={() => setEditingBill({ id: b.id, date: b.date, order_number: b.order_number || '', item_type: b.item_type || '', shipping_cost_pkr: String(b.shipping_cost_pkr || 0), manufacturing_cost_pkr: String(b.manufacturing_cost_pkr || 0), commission_pkr: String(b.commission_pkr || 0), note: b.note || '' })}>Edit</button>
+                                <button className="btn-ghost btn-sm" style={{ borderColor: '#fecaca', color: '#dc2626' }} onClick={() => deleteBill(b)}>✕</button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

@@ -435,6 +435,7 @@ router.get('/:id/balance', async (req, res) => {
   const miscRes        = await db.execute({ sql: 'SELECT * FROM handler_misc_charges WHERE handler_user_id = ? ORDER BY date DESC', args: [id] });
   const commRateRes    = await db.execute({ sql: 'SELECT rate_per_unit_pkr FROM handler_commission_rates WHERE handler_user_id = ?', args: [id] });
   const openingBalRes  = await db.execute({ sql: 'SELECT amount_pkr FROM handler_opening_balances WHERE handler_user_id = ?', args: [id] });
+  const costOverridesRes = await db.execute({ sql: 'SELECT * FROM order_cost_overrides WHERE handler_user_id = ?', args: [id] });
 
   const bills    = billsRes.rows;
   const payments = paymentsRes.rows;
@@ -490,6 +491,16 @@ router.get('/:id/balance', async (req, res) => {
   const totalMisc      = miscRes.rows.reduce((s, m) => s + (m.amount_pkr || 0), 0);
   const openingBalance = openingBalRes.rows[0]?.amount_pkr || 0;
 
+  // Build cost overrides map: { orderId: { mfg, ship, commission } }
+  const costOverrides = {};
+  costOverridesRes.rows.forEach(r => {
+    costOverrides[r.order_id] = {
+      mfg: r.manufacturing_cost_pkr,
+      ship: r.shipping_cost_pkr,
+      commission: r.commission_pkr,
+    };
+  });
+
   res.json({
     handler: handlerRes.rows[0],
     orders: ordersWithStatus,
@@ -504,6 +515,7 @@ router.get('/:id/balance', async (req, res) => {
     miscCharges: miscRes.rows,
     totalMisc,
     commissionRate: commRateRes.rows[0]?.rate_per_unit_pkr || 0,
+    costOverrides,
   });
 });
 
@@ -536,6 +548,43 @@ router.delete('/:id/bills/:billId', async (req, res) => {
   if (!billRes.rows[0]) return res.status(404).json({ error: 'Bill not found' });
   await db.execute({ sql: 'DELETE FROM handler_bills WHERE id = ?', args: [req.params.billId] });
   res.json({ success: true });
+});
+
+// ── Admin override order costs (mfg/ship/commission) ──
+router.put('/:id/orders/:orderId/costs', async (req, res) => {
+  const { id, orderId } = req.params;
+  const { manufacturing_cost_pkr, shipping_cost_pkr, commission_pkr } = req.body;
+  const mfg  = parseFloat(manufacturing_cost_pkr) || 0;
+  const ship = parseFloat(shipping_cost_pkr) || 0;
+  const comm = parseFloat(commission_pkr) || 0;
+
+  // Upsert into order_cost_overrides table
+  await db.execute({
+    sql: `INSERT INTO order_cost_overrides (handler_user_id, order_id, manufacturing_cost_pkr, shipping_cost_pkr, commission_pkr)
+          VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT(handler_user_id, order_id) DO UPDATE SET
+            manufacturing_cost_pkr = excluded.manufacturing_cost_pkr,
+            shipping_cost_pkr = excluded.shipping_cost_pkr,
+            commission_pkr = excluded.commission_pkr`,
+    args: [parseInt(id), parseInt(orderId), mfg, ship, comm],
+  });
+  res.json({ success: true, manufacturing_cost_pkr: mfg, shipping_cost_pkr: ship, commission_pkr: comm });
+});
+
+router.put('/:id/bills/:billId', async (req, res) => {
+  const billRes = await db.execute({ sql: 'SELECT * FROM handler_bills WHERE id = ? AND handler_user_id = ?', args: [req.params.billId, req.params.id] });
+  if (!billRes.rows[0]) return res.status(404).json({ error: 'Bill not found' });
+  const { shipping_cost_pkr, manufacturing_cost_pkr, commission_pkr, note, date, item_type, order_number } = req.body;
+  const ship = parseFloat(shipping_cost_pkr) || 0;
+  const mfg  = parseFloat(manufacturing_cost_pkr) || 0;
+  const comm = parseFloat(commission_pkr) || 0;
+  const total = ship + mfg + comm;
+  await db.execute({
+    sql: `UPDATE handler_bills SET shipping_cost_pkr = ?, manufacturing_cost_pkr = ?, commission_pkr = ?, total_pkr = ?, note = ?, date = ?, item_type = ?, order_number = ? WHERE id = ?`,
+    args: [ship, mfg, comm, total, note || null, date, item_type || null, order_number || null, req.params.billId],
+  });
+  const updated = await db.execute({ sql: 'SELECT * FROM handler_bills WHERE id = ?', args: [req.params.billId] });
+  res.json(updated.rows[0]);
 });
 
 // ── Record payment to handler ──
