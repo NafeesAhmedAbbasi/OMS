@@ -4,7 +4,6 @@ import OrderForm from './OrderForm';
 
 export default function EditPanel({ order, onClose, onSaved }) {
   const [form, setForm] = useState(null);
-  const [imagePreview, setImagePreview] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [syncMsg, setSyncMsg] = useState('');
@@ -12,6 +11,10 @@ export default function EditPanel({ order, onClose, onSaved }) {
 
   useEffect(() => {
     if (!order) return;
+    // Parse existing image_path (comma-separated URLs) into images array
+    const existingImages = order.image_path
+      ? order.image_path.split(',').filter(Boolean).map(url => ({ url }))
+      : [];
     setForm({
       date: order.date || '',
       customer: order.customer || '',
@@ -30,9 +33,8 @@ export default function EditPanel({ order, onClose, onSaved }) {
       order_amount: order.order_amount != null ? String(order.order_amount) : '',
       payment_method: order.payment_method || '',
       image_url: '',
-      image: null,
+      images: existingImages,
     });
-    setImagePreview(order.image_path ? `/uploads/${order.image_path.split('/').pop()}` : null);
     setError('');
     setSyncMsg('');
   }, [order]);
@@ -42,12 +44,8 @@ export default function EditPanel({ order, onClose, onSaved }) {
     setForm(f => ({ ...f, [name]: value }));
   }
 
-  function handleImageChange(e) {
-    const file = e.target.files[0];
-    if (file) {
-      setForm(f => ({ ...f, image: file }));
-      setImagePreview(URL.createObjectURL(file));
-    }
+  function handleImagesChange(newImages) {
+    setForm(f => ({ ...f, images: newImages }));
   }
 
   async function handleSave() {
@@ -62,10 +60,21 @@ export default function EditPanel({ order, onClose, onSaved }) {
     setSaving(true);
 
     const data = new FormData();
-    Object.entries(form).forEach(([k, v]) => {
-      if (k === 'image') { if (v) data.append('image', v); }
-      else data.append(k, v);
-    });
+    // Append all non-image fields
+    const { images, image_url, ...fields } = form;
+    Object.entries(fields).forEach(([k, v]) => data.append(k, v ?? ''));
+
+    // Separate kept URLs from new file uploads
+    const keptUrls = images.filter(img => !img.file).map(img => img.url);
+    const newFiles = images.filter(img => img.file).map(img => img.file);
+
+    data.append('keep_images', keptUrls.join(','));
+    newFiles.forEach(f => data.append('images', f));
+
+    // If image_url was typed in and no images yet, send it
+    if (image_url?.trim() && images.length === 0) {
+      data.append('image_url', image_url.trim());
+    }
 
     try {
       const res = await api.put(`/orders/${order.id}`, data, {
@@ -113,8 +122,7 @@ export default function EditPanel({ order, onClose, onSaved }) {
           <OrderForm
             form={form}
             onChange={handleChange}
-            onImageChange={handleImageChange}
-            imagePreview={imagePreview}
+            onImagesChange={handleImagesChange}
             compact
           />
           {isStoreEnvy && order.tracking && (

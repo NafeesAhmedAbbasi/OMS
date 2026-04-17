@@ -40,7 +40,7 @@ router.get('/', async (req, res) => {
   res.json(result.rows);
 });
 
-router.post('/', upload.single('image'), async (req, res) => {
+router.post('/', upload.array('images', 4), async (req, res) => {
   const {
     date, customer, store_ref, mc_pkr, sc_pkr, quantity,
     tracking, source, shoes_type, country, size, color,
@@ -61,7 +61,9 @@ router.post('/', upload.single('image'), async (req, res) => {
     const row = await db.execute('SELECT MAX(order_number) as max FROM orders');
     order_number = row.rows[0]?.max ? row.rows[0].max + 1 : 4001;
   }
-  const image_path = req.file ? req.file.path : (image_url?.trim() || null);
+  const image_path = req.files?.length
+    ? req.files.map(f => f.path).join(',')
+    : (image_url?.trim() || null);
 
   const result = await db.execute({
     sql: `INSERT INTO orders (order_number, date, customer, store_ref, mc_pkr, sc_pkr,
@@ -83,7 +85,7 @@ router.post('/', upload.single('image'), async (req, res) => {
   res.status(201).json(created.rows[0]);
 });
 
-router.put('/:id', upload.single('image'), async (req, res) => {
+router.put('/:id', upload.array('images', 4), async (req, res) => {
   const { id } = req.params;
   const existingRes = await db.execute({ sql: 'SELECT * FROM orders WHERE id = ?', args: [id] });
   const existing = existingRes.rows[0];
@@ -93,14 +95,24 @@ router.put('/:id', upload.single('image'), async (req, res) => {
     date, customer, store_ref, mc_pkr, sc_pkr, quantity,
     tracking, source, shoes_type, country, size, color,
     comments, shipping_service, order_amount, payment_method, shipping_address,
-    image_url,
+    image_url, keep_images,
   } = req.body;
 
   if (!date || !customer || !source || !shoes_type || !country || !size || !color || !order_amount || !payment_method) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
-  const image_path = req.file ? req.file.path : (image_url?.trim() || existing.image_path);
+  // Build new image_path:
+  // keep_images = comma-separated list of existing URLs to keep (sent by client after removals)
+  // new uploads are appended, up to 4 total
+  let kept = keep_images ? keep_images.split(',').filter(Boolean) : (existing.image_path ? existing.image_path.split(',').filter(Boolean) : []);
+  if (req.files?.length) {
+    const newPaths = req.files.map(f => f.path);
+    kept = [...kept, ...newPaths].slice(0, 4);
+  } else if (image_url?.trim()) {
+    kept = [...kept, image_url.trim()].slice(0, 4);
+  }
+  const image_path = kept.length ? kept.join(',') : null;
 
   await db.execute({
     sql: `UPDATE orders SET

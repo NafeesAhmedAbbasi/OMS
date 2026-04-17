@@ -99,12 +99,16 @@ export default function OrderCard({ order, onClose }) {
           {/* Image row */}
           <div className="oc-image-row">
             {order.image_path ? (
-              <img
-                src={order.image_path}
-                alt="Product"
-                className="oc-image"
-                crossOrigin="anonymous"
-              />
+              order.image_path.split(',').filter(Boolean).map((url, i, arr) => (
+                <img
+                  key={i}
+                  src={url}
+                  alt={`Product ${i + 1}`}
+                  className="oc-image"
+                  crossOrigin="anonymous"
+                  style={arr.length > 1 ? { borderLeft: i > 0 ? '2px solid #000' : undefined } : {}}
+                />
+              ))
             ) : (
               <div className="oc-image-placeholder">
                 <span>No Image</span>
@@ -126,6 +130,11 @@ export default function OrderCard({ order, onClose }) {
             </div>
             <div className="oc-cell oc-size">
               US-Size:{order.size}
+              {order.comments && (
+                <span style={{ display: 'block', fontSize: 12, fontWeight: 400, color: '#333', marginTop: 6, textAlign: 'right', lineHeight: 1.4 }}>
+                  {order.comments}
+                </span>
+              )}
             </div>
           </div>
 

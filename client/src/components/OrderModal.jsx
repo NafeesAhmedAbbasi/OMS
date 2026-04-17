@@ -23,7 +23,6 @@ function DetailRow({ label, value, highlight }) {
 export default function OrderModal({ order, initialMode = 'view', onClose, onSaved }) {
   const [mode, setMode] = useState(initialMode);
   const [form, setForm] = useState(null);
-  const [imagePreview, setImagePreview] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [partialRefund, setPartialRefund] = useState('');
@@ -82,6 +81,9 @@ export default function OrderModal({ order, initialMode = 'view', onClose, onSav
     setError('');
     setCancelExpanded(false);
     setCancelForm({ manufacturing: '', shipping: '', commission: '', note: '' });
+    const existingImages = order.image_path
+      ? order.image_path.split(',').filter(Boolean).map(url => ({ url }))
+      : [];
     setForm({
       date: order.date || '',
       customer: order.customer || '',
@@ -101,9 +103,8 @@ export default function OrderModal({ order, initialMode = 'view', onClose, onSav
       payment_method: order.payment_method || '',
       shipping_address: order.shipping_address || '',
       image_url: '',
-      image: null,
+      images: existingImages,
     });
-    setImagePreview(order.image_path || null);
   }, [order, initialMode]);
 
   function handleChange(e) {
@@ -111,12 +112,8 @@ export default function OrderModal({ order, initialMode = 'view', onClose, onSav
     setForm(f => ({ ...f, [name]: value }));
   }
 
-  function handleImageChange(e) {
-    const file = e.target.files[0];
-    if (file) {
-      setForm(f => ({ ...f, image: file }));
-      setImagePreview(URL.createObjectURL(file));
-    }
+  function handleImagesChange(newImages) {
+    setForm(f => ({ ...f, images: newImages }));
   }
 
   async function handleSave() {
@@ -130,9 +127,14 @@ export default function OrderModal({ order, initialMode = 'view', onClose, onSav
     setError('');
     setSaving(true);
     const data = new FormData();
-    Object.entries(form).forEach(([k, v]) => {
-      if (k === 'image') { if (v) data.append('image', v); }
-      else data.append(k, v);
+    const { images, image_url, ...fields } = form;
+    Object.entries(fields).forEach(([k, v]) => data.append(k, v ?? ''));
+
+    const keptUrls = images.filter(img => !img.file).map(img => img.url);
+    const newFiles = images.filter(img => img.file).map(img => img.file);
+    data.append('keep_images', keptUrls.join(','));
+    newFiles.forEach(f => data.append('images', f));
+    if (image_url?.trim() && images.length === 0) data.append('image_url', image_url.trim());
     });
     try {
       const res = await api.put(`/orders/${order.id}`, data);
@@ -226,10 +228,14 @@ export default function OrderModal({ order, initialMode = 'view', onClose, onSav
                 )}
                 {order.image_path && (
                   <div className="detail-section">
-                    <div className="detail-section-title">Image</div>
-                    <a href={order.image_path} target="_blank" rel="noreferrer">
-                      <img src={order.image_path} alt="Order" className="detail-image" />
-                    </a>
+                    <div className="detail-section-title">Images</div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {order.image_path.split(',').filter(Boolean).map((url, i) => (
+                        <a key={i} href={url} target="_blank" rel="noreferrer">
+                          <img src={url} alt={`Image ${i + 1}`} className="detail-image" style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 8 }} />
+                        </a>
+                      ))}
+                    </div>
                   </div>
                 )}
                 {isEditor && (
@@ -370,8 +376,7 @@ export default function OrderModal({ order, initialMode = 'view', onClose, onSav
             <OrderForm
               form={form}
               onChange={handleChange}
-              onImageChange={handleImageChange}
-              imagePreview={imagePreview}
+              onImagesChange={handleImagesChange}
               compact
             />
           )}

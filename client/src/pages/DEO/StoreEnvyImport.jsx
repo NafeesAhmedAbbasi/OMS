@@ -16,6 +16,14 @@ function guessItemType(productName) {
   return productName || 'Unknown';
 }
 
+function mapPaymentMethod(processor) {
+  const p = (processor || '').toLowerCase().trim();
+  if (p.includes('stripe'))  return 'Stripe';
+  if (p.includes('paypal'))  return 'PayPal';
+  if (p.includes('store envy') || p.includes('storenvy')) return 'Store Envy';
+  return processor || 'Store Envy';
+}
+
 function mapStoreEnvyOrder(o, accountName) {
   const addr    = o.address || {};
   const items   = (o.items || []).map(i => i.item || i);
@@ -36,7 +44,7 @@ function mapStoreEnvyOrder(o, accountName) {
     color:            'N/A',
     country:          addr.country || '',
     order_amount:     String(o.price || ''),
-    payment_method:   o.payment_processor || 'Store Envy',
+    payment_method:   mapPaymentMethod(o.payment_processor),
     shipping_address: addrStr,
     mc_pkr: '', sc_pkr: '', tracking: '', comments: '', shipping_service: '',
   };
@@ -45,9 +53,7 @@ function mapStoreEnvyOrder(o, accountName) {
 // ── Review modal — shows one order at a time for editing before import ──
 function ReviewModal({ queue, accountName, onDone }) {
   const [index, setIndex]           = useState(0);
-  const [form, setForm]             = useState(() => mapStoreEnvyOrder(queue[0], accountName));
-  const [imageFile, setImageFile]   = useState(null);
-  const [imagePreview, setImagePreview] = useState(null);
+  const [form, setForm]             = useState(() => ({ ...mapStoreEnvyOrder(queue[0], accountName), images: [] }));
   const [nextNumber, setNextNumber] = useState('');
   const [customNumber, setCustomNumber] = useState('');
   const [numberError, setNumberError] = useState('');
@@ -61,9 +67,7 @@ function ReviewModal({ queue, accountName, onDone }) {
 
   // When index changes, reset form + fetch next number + prefetch image
   useEffect(() => {
-    setForm(mapStoreEnvyOrder(queue[index], accountName));
-    setImageFile(null);
-    setImagePreview(null);
+    setForm({ ...mapStoreEnvyOrder(queue[index], accountName), images: [] });
     setError('');
     setNumberError('');
 
@@ -80,8 +84,9 @@ function ReviewModal({ queue, accountName, onDone }) {
       api.get('/settings/image-proxy', { params: { url: imageUrl }, responseType: 'blob' })
         .then(res => {
           const blob = res.data;
-          setImageFile(new File([blob], `storenvy_${queue[index].id}.jpg`, { type: blob.type || 'image/jpeg' }));
-          setImagePreview(URL.createObjectURL(blob));
+          const file = new File([blob], `storenvy_${queue[index].id}.jpg`, { type: blob.type || 'image/jpeg' });
+          const url  = URL.createObjectURL(blob);
+          setForm(f => ({ ...f, images: [{ url, file }] }));
         })
         .catch(() => {});
     }
@@ -92,12 +97,8 @@ function ReviewModal({ queue, accountName, onDone }) {
     setForm(f => ({ ...f, [name]: value }));
   }
 
-  function handleImageChange(e) {
-    const file = e.target.files[0];
-    if (file) {
-      setImageFile(file);
-      setImagePreview(URL.createObjectURL(file));
-    }
+  function handleImagesChange(newImages) {
+    setForm(f => ({ ...f, images: newImages }));
   }
 
   async function handleImport() {
@@ -105,8 +106,9 @@ function ReviewModal({ queue, accountName, onDone }) {
     setNumberError('');
     setSaving(true);
     const fd = new FormData();
-    Object.entries(form).forEach(([k, v]) => { if (v != null) fd.append(k, v); });
-    if (imageFile) fd.append('image', imageFile);
+    const { images, image_url, ...fields } = form;
+    Object.entries(fields).forEach(([k, v]) => { if (v != null) fd.append(k, v); });
+    images.filter(img => img.file).forEach(img => fd.append('images', img.file));
     if (customNumber && customNumber !== nextNumber) fd.append('order_number', customNumber);
     try {
       const res = await api.post('/orders', fd);
@@ -180,8 +182,7 @@ function ReviewModal({ queue, accountName, onDone }) {
           <OrderForm
             form={form}
             onChange={handleChange}
-            onImageChange={handleImageChange}
-            imagePreview={imagePreview}
+            onImagesChange={handleImagesChange}
             compact
             hideCosts
           />

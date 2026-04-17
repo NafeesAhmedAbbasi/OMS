@@ -6,37 +6,38 @@ import OrderForm from '../../components/OrderForm';
 
 const TODAY = new Date().toISOString().split('T')[0];
 
-const EMPTY_FORM = {
-  date: TODAY,
-  customer: '',
-  store_ref: '',
-  mc_pkr: '',
-  sc_pkr: '',
-  quantity: '1',
-  tracking: '',
-  source: '',
-  shoes_type: '',
-  country: '',
-  size: '',
-  color: '',
-  comments: '',
-  shipping_service: '',
-  order_amount: '',
-  payment_method: '',
-  shipping_address: '',
-  image_url: '',
-  image: null,
-};
+function emptyForm() {
+  return {
+    date: TODAY,
+    customer: '',
+    store_ref: '',
+    mc_pkr: '',
+    sc_pkr: '',
+    quantity: '1',
+    tracking: '',
+    source: '',
+    shoes_type: '',
+    country: '',
+    size: '',
+    color: '',
+    comments: '',
+    shipping_service: '',
+    order_amount: '',
+    payment_method: '',
+    shipping_address: '',
+    image_url: '',
+    images: [],
+  };
+}
 
 export default function CreateOrder() {
-  const [form, setForm] = useState(EMPTY_FORM);
+  const [form, setForm] = useState(emptyForm());
   const [nextNumber, setNextNumber] = useState('');
   const [customNumber, setCustomNumber] = useState('');
   const [numberError, setNumberError] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [saving, setSaving] = useState(false);
-  const [imagePreview, setImagePreview] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -51,12 +52,8 @@ export default function CreateOrder() {
     setForm(f => ({ ...f, [name]: value }));
   }
 
-  function handleImageChange(e) {
-    const file = e.target.files[0];
-    if (file) {
-      setForm(f => ({ ...f, image: file }));
-      setImagePreview(URL.createObjectURL(file));
-    }
+  function handleImagesChange(newImages) {
+    setForm(f => ({ ...f, images: newImages }));
   }
 
   async function submitOrder() {
@@ -73,10 +70,17 @@ export default function CreateOrder() {
     setSaving(true);
 
     const data = new FormData();
-    Object.entries(form).forEach(([k, v]) => {
-      if (k === 'image') { if (v) data.append('image', v); }
-      else data.append(k, v);
-    });
+    const { images, image_url, ...fields } = form;
+    Object.entries(fields).forEach(([k, v]) => data.append(k, v ?? ''));
+
+    // Append new file uploads
+    images.filter(img => img.file).forEach(img => data.append('images', img.file));
+
+    // If only a URL was entered
+    if (image_url?.trim() && images.length === 0) {
+      data.append('image_url', image_url.trim());
+    }
+
     if (customNumber && customNumber !== nextNumber) {
       data.append('order_number', customNumber);
     }
@@ -98,8 +102,7 @@ export default function CreateOrder() {
     e.preventDefault();
     const saved = await submitOrder();
     if (saved) {
-      setForm({ ...EMPTY_FORM, date: TODAY });
-      setImagePreview(null);
+      setForm({ ...emptyForm(), date: TODAY });
       setSuccess(`Order #${saved.order_number} saved successfully.`);
       api.get('/orders/next-number').then(res => {
         setNextNumber(String(res.data.next));
@@ -156,8 +159,7 @@ export default function CreateOrder() {
           <OrderForm
             form={form}
             onChange={handleChange}
-            onImageChange={handleImageChange}
-            imagePreview={imagePreview}
+            onImagesChange={handleImagesChange}
             hideCosts
           />
 
