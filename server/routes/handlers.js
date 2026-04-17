@@ -87,9 +87,9 @@ router.get('/my/dashboard', async (req, res) => {
 
   const workers = workersRes.rows.map(w => ({
     ...w,
-    total_owed: workerOwedMap[w.id] || 0,
+    total_owed: (w.opening_balance_pkr || 0) + (workerOwedMap[w.id] || 0),
     total_paid: workerPayMap[w.id] || 0,
-    balance: (workerOwedMap[w.id] || 0) - (workerPayMap[w.id] || 0),
+    balance: (w.opening_balance_pkr || 0) + (workerOwedMap[w.id] || 0) - (workerPayMap[w.id] || 0),
   }));
 
   res.json({
@@ -141,9 +141,9 @@ router.get('/:id/workers', async (req, res) => {
 
   res.json(workersRes.rows.map(w => ({
     ...w,
-    total_owed: owedMap[w.id] || 0,
+    total_owed: (w.opening_balance_pkr || 0) + (owedMap[w.id] || 0),
     total_paid: paidMap[w.id] || 0,
-    balance: (owedMap[w.id] || 0) - (paidMap[w.id] || 0),
+    balance: (w.opening_balance_pkr || 0) + (owedMap[w.id] || 0) - (paidMap[w.id] || 0),
   })));
 });
 
@@ -151,16 +151,17 @@ router.get('/:id/workers', async (req, res) => {
 router.post('/:id/workers', async (req, res) => {
   if (!requireHandlerOrAdmin(req, res, req.params.id)) return;
   const handlerId = parseInt(req.params.id);
-  const { name, role } = req.body;
+  const { name, role, opening_balance_pkr } = req.body;
   if (!name || !role) return res.status(400).json({ error: 'name and role are required' });
   if (!['manufacturer', 'shipper'].includes(role)) return res.status(400).json({ error: 'role must be manufacturer or shipper' });
+  const ob = parseFloat(opening_balance_pkr) || 0;
 
   const result = await db.execute({
-    sql: 'INSERT INTO handler_workers (handler_user_id, name, role) VALUES (?, ?, ?)',
-    args: [handlerId, name.trim(), role],
+    sql: 'INSERT INTO handler_workers (handler_user_id, name, role, opening_balance_pkr) VALUES (?, ?, ?, ?)',
+    args: [handlerId, name.trim(), role, ob],
   });
   const created = await db.execute({ sql: 'SELECT * FROM handler_workers WHERE id = ?', args: [result.lastInsertRowid] });
-  res.status(201).json({ ...created.rows[0], total_owed: 0, total_paid: 0, balance: 0 });
+  res.status(201).json({ ...created.rows[0], total_owed: ob, total_paid: 0, balance: ob });
 });
 
 // ── Workers: update (handler or admin) ──
@@ -172,11 +173,12 @@ router.put('/:id/workers/:wid', async (req, res) => {
   });
   if (!workerRes.rows[0]) return res.status(404).json({ error: 'Worker not found' });
 
-  const { name, is_active } = req.body;
+  const { name, is_active, opening_balance_pkr } = req.body;
   const updates = [];
   const args = [];
-  if (name !== undefined)      { updates.push('name = ?');      args.push(name.trim()); }
-  if (is_active !== undefined) { updates.push('is_active = ?'); args.push(is_active ? 1 : 0); }
+  if (name !== undefined)                { updates.push('name = ?');                args.push(name.trim()); }
+  if (is_active !== undefined)           { updates.push('is_active = ?');           args.push(is_active ? 1 : 0); }
+  if (opening_balance_pkr !== undefined) { updates.push('opening_balance_pkr = ?'); args.push(parseFloat(opening_balance_pkr) || 0); }
   if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' });
 
   args.push(req.params.wid);
@@ -357,28 +359,32 @@ router.get('/', async (req, res) => {
   const handlersRes = await db.execute(`SELECT id, username, is_active FROM users WHERE role = 'handler' ORDER BY username ASC`);
   const handlers = handlersRes.rows;
 
-  const billsRes         = await db.execute('SELECT handler_user_id, total_pkr FROM handler_bills');
-  const paymentsRes      = await db.execute('SELECT handler_user_id, amount_pkr FROM handler_payments');
+  const billsRes          = await db.execute('SELECT handler_user_id, total_pkr FROM handler_bills');
+  const paymentsRes       = await db.execute('SELECT handler_user_id, amount_pkr FROM handler_payments');
   const assignedOrdersRes = await db.execute('SELECT handler_id, id FROM orders WHERE handler_id IS NOT NULL');
-  const commRatesRes     = await db.execute('SELECT handler_user_id, rate_per_unit_pkr FROM handler_commission_rates');
+  const commRatesRes      = await db.execute('SELECT handler_user_id, rate_per_unit_pkr FROM handler_commission_rates');
+  const openingBalRes     = await db.execute('SELECT handler_user_id, amount_pkr FROM handler_opening_balances');
 
-  const bills         = billsRes.rows;
-  const payments      = paymentsRes.rows;
+  const bills          = billsRes.rows;
+  const payments       = paymentsRes.rows;
   const assignedOrders = assignedOrdersRes.rows;
-  const commRates     = commRatesRes.rows;
+  const commRates      = commRatesRes.rows;
+  const openingBals    = openingBalRes.rows;
 
   res.json(handlers.map(h => {
     const hBills    = bills.filter(b => b.handler_user_id === h.id);
     const hPayments = payments.filter(p => p.handler_user_id === h.id);
+    const ob        = openingBals.find(r => r.handler_user_id === h.id)?.amount_pkr || 0;
     const totalBilled = hBills.reduce((s, b) => s + (b.total_pkr || 0), 0);
     const totalPaid   = hPayments.reduce((s, p) => s + (p.amount_pkr || 0), 0);
     const cr = commRates.find(r => r.handler_user_id === h.id);
     return {
       ...h,
       commissionRate: cr ? cr.rate_per_unit_pkr : 0,
+      openingBalance: ob,
       totalBilled,
       totalPaid,
-      balance: totalPaid - totalBilled,
+      balance: ob + totalPaid - totalBilled,
       assignedOrderCount: assignedOrders.filter(o => o.handler_id === h.id).length,
     };
   }));
@@ -401,6 +407,21 @@ router.put('/:id/commission-rate', async (req, res) => {
   res.json({ handler_user_id: parseInt(id), rate_per_unit_pkr: rate });
 });
 
+// ── Save opening balance ──
+router.put('/:id/opening-balance', async (req, res) => {
+  const { id } = req.params;
+  const handlerRes = await db.execute({ sql: `SELECT id FROM users WHERE id = ? AND role = 'handler'`, args: [id] });
+  if (!handlerRes.rows[0]) return res.status(404).json({ error: 'Handler not found' });
+
+  const amount = parseFloat(req.body.amount_pkr) || 0;
+  await db.execute({
+    sql: `INSERT INTO handler_opening_balances (handler_user_id, amount_pkr) VALUES (?, ?)
+          ON CONFLICT(handler_user_id) DO UPDATE SET amount_pkr = excluded.amount_pkr`,
+    args: [parseInt(id), amount],
+  });
+  res.json({ handler_user_id: parseInt(id), amount_pkr: amount });
+});
+
 // ── Handler balance (admin view) ──
 router.get('/:id/balance', async (req, res) => {
   const { id } = req.params;
@@ -413,6 +434,7 @@ router.get('/:id/balance', async (req, res) => {
   const workersRes     = await db.execute({ sql: 'SELECT * FROM handler_workers WHERE handler_user_id = ? ORDER BY role ASC, name ASC', args: [id] });
   const miscRes        = await db.execute({ sql: 'SELECT * FROM handler_misc_charges WHERE handler_user_id = ? ORDER BY date DESC', args: [id] });
   const commRateRes    = await db.execute({ sql: 'SELECT rate_per_unit_pkr FROM handler_commission_rates WHERE handler_user_id = ?', args: [id] });
+  const openingBalRes  = await db.execute({ sql: 'SELECT amount_pkr FROM handler_opening_balances WHERE handler_user_id = ?', args: [id] });
 
   const bills    = billsRes.rows;
   const payments = paymentsRes.rows;
@@ -458,14 +480,15 @@ router.get('/:id/balance', async (req, res) => {
   }
   const workers = workersRes.rows.map(w => ({
     ...w,
-    total_owed: owedMap[w.id] || 0,
+    total_owed: (w.opening_balance_pkr || 0) + (owedMap[w.id] || 0),
     total_paid: paidMap[w.id] || 0,
-    balance: (owedMap[w.id] || 0) - (paidMap[w.id] || 0),
+    balance: (w.opening_balance_pkr || 0) + (owedMap[w.id] || 0) - (paidMap[w.id] || 0),
   }));
 
-  const totalBilled = bills.reduce((s, b) => s + (b.total_pkr || 0), 0);
-  const totalPaid   = payments.reduce((s, p) => s + (p.amount_pkr || 0), 0);
-  const totalMisc   = miscRes.rows.reduce((s, m) => s + (m.amount_pkr || 0), 0);
+  const totalBilled    = bills.reduce((s, b) => s + (b.total_pkr || 0), 0);
+  const totalPaid      = payments.reduce((s, p) => s + (p.amount_pkr || 0), 0);
+  const totalMisc      = miscRes.rows.reduce((s, m) => s + (m.amount_pkr || 0), 0);
+  const openingBalance = openingBalRes.rows[0]?.amount_pkr || 0;
 
   res.json({
     handler: handlerRes.rows[0],
@@ -474,7 +497,8 @@ router.get('/:id/balance', async (req, res) => {
     payments,
     totalBilled,
     totalPaid,
-    balance: totalPaid - totalBilled,
+    balance: openingBalance + totalPaid - totalBilled,
+    openingBalance,
     workers,
     assignments,
     miscCharges: miscRes.rows,

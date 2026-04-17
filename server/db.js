@@ -125,12 +125,18 @@ async function init() {
       rate_per_unit_pkr REAL NOT NULL DEFAULT 0
     );
 
+    CREATE TABLE IF NOT EXISTS handler_opening_balances (
+      handler_user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      amount_pkr REAL NOT NULL DEFAULT 0
+    );
+
     CREATE TABLE IF NOT EXISTS handler_workers (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       handler_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
       role TEXT NOT NULL CHECK(role IN ('manufacturer','shipper')),
       is_active INTEGER NOT NULL DEFAULT 1,
+      opening_balance_pkr REAL NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -173,6 +179,9 @@ async function init() {
   // ── Migrations: add columns to existing tables if missing ──
   try {
     await db.execute('ALTER TABLE billing_accounts ADD COLUMN opening_balance REAL NOT NULL DEFAULT 0');
+  } catch { /* column already exists */ }
+  try {
+    await db.execute('ALTER TABLE handler_workers ADD COLUMN opening_balance_pkr REAL NOT NULL DEFAULT 0');
   } catch { /* column already exists */ }
 
   // ── Seed default users ──

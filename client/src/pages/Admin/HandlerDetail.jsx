@@ -159,6 +159,12 @@ export default function HandlerDetail() {
                 <div className="stat-label">Total Paid</div>
                 <div className="stat-value" style={{ color: '#059669' }}>PKR {fmt(balance.totalPaid)}</div>
               </div>
+              {balance.openingBalance > 0 && (
+                <div className="stat-card" style={{ flex: 1, minWidth: 140 }}>
+                  <div className="stat-label">Previous Balance</div>
+                  <div className="stat-value" style={{ color: '#059669', fontSize: 16 }}>PKR {fmt(balance.openingBalance)}</div>
+                </div>
+              )}
               {balance.totalMisc > 0 && (
                 <div className="stat-card" style={{ flex: 1, minWidth: 140 }}>
                   <div className="stat-label">Misc Charges</div>

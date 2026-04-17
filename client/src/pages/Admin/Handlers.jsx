@@ -15,6 +15,7 @@ export default function Handlers() {
   // Commission rate modal
   const [commModal, setCommModal]   = useState(null);
   const [commRate, setCommRate]     = useState('');
+  const [openingBal, setOpeningBal] = useState('');
   const [commSaving, setCommSaving] = useState(false);
 
   useEffect(() => {
@@ -27,15 +28,21 @@ export default function Handlers() {
   function openCommissions(handler) {
     setCommModal(handler);
     setCommRate(String(handler.commissionRate || 0));
+    setOpeningBal(String(handler.openingBalance || 0));
   }
 
   async function saveCommissionRate() {
     setCommSaving(true); setError('');
     try {
-      const res = await api.put(`/handlers/${commModal.id}/commission-rate`, { rate_per_unit_pkr: parseFloat(commRate) || 0 });
-      setHandlers(prev => prev.map(h => h.id === commModal.id ? { ...h, commissionRate: res.data.rate_per_unit_pkr } : h));
+      const [rateRes] = await Promise.all([
+        api.put(`/handlers/${commModal.id}/commission-rate`, { rate_per_unit_pkr: parseFloat(commRate) || 0 }),
+        api.put(`/handlers/${commModal.id}/opening-balance`, { amount_pkr: parseFloat(openingBal) || 0 }),
+      ]);
+      setHandlers(prev => prev.map(h => h.id === commModal.id
+        ? { ...h, commissionRate: rateRes.data.rate_per_unit_pkr, openingBalance: parseFloat(openingBal) || 0 }
+        : h));
       setCommModal(null);
-      setSuccess(`Commission rate saved for ${commModal.username}.`);
+      setSuccess(`Settings saved for ${commModal.username}.`);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed');
     } finally {
@@ -122,11 +129,17 @@ export default function Handlers() {
       {commModal && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setCommModal(null)}>
           <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 28, width: 'min(380px,95vw)', boxShadow: 'var(--shadow-lg)' }} onClick={e => e.stopPropagation()}>
-            <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 4 }}>{commModal.username} — Commission Rate</div>
-            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>PKR per unit (piece/item). Commission = rate × quantity per order.</div>
-            <div className="form-group" style={{ margin: 0 }}>
-              <label>Rate per unit (PKR)</label>
+            <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 4 }}>{commModal.username} — Settings</div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>Commission rate and pre-existing balance.</div>
+            <div className="form-group" style={{ margin: 0, marginBottom: 16 }}>
+              <label>Commission rate per unit (PKR)</label>
               <input type="number" value={commRate} onChange={e => setCommRate(e.target.value)} min="0" step="1" placeholder="e.g. 200" autoFocus />
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Commission = rate × quantity per order.</div>
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label>Previous Balance (PKR)</label>
+              <input type="number" value={openingBal} onChange={e => setOpeningBal(e.target.value)} min="0" step="1" placeholder="0" />
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Pre-existing amount owed to handler before any bills were recorded.</div>
             </div>
             <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
               <button className="btn-ghost" onClick={() => setCommModal(null)}>Cancel</button>
