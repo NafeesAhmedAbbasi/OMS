@@ -118,7 +118,19 @@ export default function OrderList() {
     });
   }, [orders, filterYear, filterMonth, filterWeek, filterSource]);
 
-  function handleSaved(updated) {
+  const sourceStats = useMemo(() => {
+    // Count filtered orders per source, sorted descending
+    const counts = {};
+    filtered.forEach(o => {
+      const src = o.source || 'Unknown';
+      counts[src] = (counts[src] || 0) + 1;
+    });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  }, [filtered]);
+
+  const maxSourceCount = sourceStats.length ? sourceStats[0][1] : 1;
+
+
     setOrders(prev => prev.map(o => o.id === updated.id ? updated : o));
     setModal(null);
     // keep cardOrder in sync so Generate card shows fresh data
@@ -200,6 +212,45 @@ export default function OrderList() {
             </span>
           </div>
         </div>
+
+        {/* ── Source Chart ── */}
+        {!loading && sourceStats.length > 0 && (
+          <div className="table-card" style={{ padding: '16px 20px', marginBottom: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 12 }}>
+              Orders by Source {hasFilters && <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(filtered)</span>}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {sourceStats.map(([src, count]) => (
+                <div
+                  key={src}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
+                  onClick={() => setFilterSource(filterSource === src ? '' : src)}
+                  title={filterSource === src ? 'Click to clear filter' : `Click to filter by ${src}`}
+                >
+                  <div style={{ width: 90, fontSize: 13, fontWeight: 600, color: filterSource === src ? 'var(--primary)' : 'var(--text)', textAlign: 'right', flexShrink: 0 }}>
+                    {src}
+                  </div>
+                  <div style={{ flex: 1, background: 'var(--bg)', borderRadius: 6, height: 24, overflow: 'hidden', position: 'relative' }}>
+                    <div style={{
+                      width: `${(count / maxSourceCount) * 100}%`,
+                      height: '100%',
+                      background: filterSource === src ? 'var(--primary)' : 'var(--primary-soft, #ede9fe)',
+                      borderRadius: 6,
+                      transition: 'width 0.3s ease, background 0.15s',
+                      display: 'flex',
+                      alignItems: 'center',
+                      paddingLeft: 8,
+                    }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: filterSource === src ? '#fff' : 'var(--primary)', whiteSpace: 'nowrap' }}>
+                        {count}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ── Table ── */}
         <div className="table-card">
