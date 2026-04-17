@@ -135,7 +135,6 @@ export default function OrderModal({ order, initialMode = 'view', onClose, onSav
     data.append('keep_images', keptUrls.join(','));
     newFiles.forEach(f => data.append('images', f));
     if (image_url?.trim() && images.length === 0) data.append('image_url', image_url.trim());
-    });
     try {
       const res = await api.put(`/orders/${order.id}`, data);
       onSaved(res.data);
